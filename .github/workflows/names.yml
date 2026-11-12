@@ -1,0 +1,26 @@
+# Full tournament names from chess-results.com (the player database cuts them at 30 characters): one request a tournament,
+# 8 runners sharing the list. The result is an artifact (tnr-names-<shard>.jsonl).
+name: Tournament names
+on:
+  workflow_dispatch:
+    inputs:
+      only: { description: "Only these tournament ids (comma-separated); empty: every tournament on the lists", default: "" }
+permissions:
+  contents: read
+
+jobs:
+  names:
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+    strategy: { fail-fast: false, matrix: { shard: [1, 2, 3, 4, 5, 6, 7, 8] } }
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with: { python-version: "3.12" }
+      - run: pip install requests
+      - run: |
+          python3 tools/scrape-tournament-names.py ${{ inputs.only && format('--only {0}', inputs.only) || '' }} --shard ${{ matrix.shard }}/8 || echo "stopped early (exit $?)"
+          cp tools/cache/tnr-names.jsonl tnr-names-${{ matrix.shard }}.jsonl 2>/dev/null || true
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with: { name: "names-${{ matrix.shard }}", path: "tnr-names-${{ matrix.shard }}.jsonl", if-no-files-found: ignore }
