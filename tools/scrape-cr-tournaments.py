@@ -54,26 +54,46 @@ def get(sess, url, **kw):
 
 RES = {"1 - 0": "1-0", "0 - 1": "0-1", "½ - ½": "1/2-1/2"}
 
+NAMEISH = re.compile(r"[a-z]|,")   # a name has a lower-case letter or a comma; ratings, points, titles and federations do not
+
+def name_near(cells, i, step):
+    """The nearest cell from the result outwards that reads like a name (pairings tables differ: rating, points, title or federation
+    columns can sit between the name and the result)."""
+    k = i + step
+    while 0 <= k < len(cells):
+        c = cells[k]
+        if len(c) >= 4 and NAMEISH.search(c): return c
+        k += step
+    return ""
+
 def by_game(sess, t, rounds):
-    """PGN text of a tournament built from per-game links; "" if the pairings list none."""
-    out = []
+    """PGN text of a tournament built from per-game links; "" if the pairings list none. A game is taken once, however many round pages
+    list it (a team tournament's pages can repeat every board)."""
+    out, seen = [], set()
     for rd in range(1, (rounds or 15) + 1):   # rounds unknown (a chat link): until a round has no pairings
         r = get(sess, f"https://chess-results.com/tnr{t}.aspx?lan=1&art=2&rd={rd}&turdet=NO")
         if r is None: continue
         if not rounds and not re.search(r'<tr class="CRg[12]">', r.text): break
         for row in re.findall(r'<tr class="CRg[12]">.*?</tr>', r.text, re.S):
             link = re.search(r'PartieSuche\.aspx\?art=36&amp;id=(\d+)', row)
-            cells = [html.unescape(re.sub(r"<[^>]*>", "", c)).strip() for c in re.findall(r'<td class="CRc?">(.*?)</td>', row, re.S)]
+            if not link or link.group(1) in seen: continue
+            cells = [html.unescape(re.sub(r"<[^>]*>", "", c)).strip() for c in re.findall(r"<td[^>]*>(.*?)</td>", row, re.S)]
             i = next((k for k, c in enumerate(cells) if c in RES), None)
-            if not link or i is None or i < 3 or i + 3 >= len(cells) or not (cells[i - 3] and cells[i + 3]): continue
+            if i is None: continue
+            seen.add(link.group(1))
             g = get(sess, f"https://chess-results.com/PartieSuche.aspx?art=36&id={link.group(1)}&lan=1")
             if g is None: continue
             mv = [re.sub(r"^\d+\.\s*", "", html.unescape(x).strip()) for x in re.findall(r'<a class="game0"[^>]*>([^<]+)</a>', g.text)]
             h = re.search(r"<br>(?:(.*?), )?(\d\d)\.(\d\d)\.(\d{4})</p>", g.text, re.S)
             if not mv or not h: continue
+            # The game page heads the moves with "White - Black<br>Event, date": its names win over the table's.
+            pp = re.search(r">([^<>]+?) - ([^<>]+?)<br>(?:[^<]*?, )?\d\d\.\d\d\.\d{4}</p>", g.text, re.S)
+            white, black = (html.unescape(pp.group(1)).strip(), html.unescape(pp.group(2)).strip()) if pp else ("", "")
+            if not NAMEISH.search(white) or not NAMEISH.search(black): white, black = name_near(cells, i, -1), name_near(cells, i, 1)
+            if not white or not black: continue
             ev, d, mo, y = h.groups(); ev = ev or D["tournaments"][t]["n"]
             text = " ".join((f"{k // 2 + 1}. " if k % 2 == 0 else "") + m for k, m in enumerate(mv))
-            out.append(f'[Event "{ev.strip()}"]\n[Date "{y}.{mo}.{d}"]\n[Round "{rd}"]\n[White "{cells[i - 3]}"]\n[Black "{cells[i + 3]}"]\n[Result "{RES[cells[i]]}"]\n\n{text} {RES[cells[i]]}\n')
+            out.append(f'[Event "{ev.strip()}"]\n[Date "{y}.{mo}.{d}"]\n[Round "{rd}"]\n[White "{white}"]\n[Black "{black}"]\n[Result "{RES[cells[i]]}"]\n\n{text} {RES[cells[i]]}\n')
     return "\n".join(out)
 
 def one(t):
