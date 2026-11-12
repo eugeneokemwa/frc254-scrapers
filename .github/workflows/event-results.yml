@@ -25,4 +25,4 @@ jobs:
           name: event-results
           path: |
             assets/results-links.js
-            assets/podiums.js }
+            assets/podiums.js
