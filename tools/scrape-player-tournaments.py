@@ -143,10 +143,10 @@ def main():
     --shard K/N --out FILE: only every N-th id (K from 1), results to FILE (jsonl).
     --merge FILE...: combine shard files into the final file."""
     args = sys.argv[1:]
-    if args and args[0] == "--merge":
+    if "--merge" in args:   # anywhere among the options: a merge must never fall through to scraping every id from one machine
         done = {}
-        for f in args[1:]:
-            if f.startswith("--") or f in (FROM, TO, FINAL): continue
+        for f in args[args.index("--merge") + 1:]:
+            if f.startswith("--"): break
             done.update(read_jsonl(f))
         return write_final(done)
     shard = out_path = None

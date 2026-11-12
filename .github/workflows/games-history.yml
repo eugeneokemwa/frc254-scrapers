@@ -36,7 +36,7 @@ jobs:
       - uses: actions/download-artifact@v4
         with: { pattern: "players-*", path: shards, merge-multiple: true }
       - run: pip install requests beautifulsoup4
-      - run: python3 tools/scrape-player-tournaments.py --from ${{ inputs.from }} --to ${{ inputs.to }} --final assets/gp-player-tournaments-history.js --merge shards/shard-*.jsonl
+      - run: python3 tools/scrape-player-tournaments.py --merge shards/shard-*.jsonl --from ${{ inputs.from }} --to ${{ inputs.to }} --final assets/gp-player-tournaments-history.js
       - uses: actions/upload-artifact@v4
         with: { name: history, path: assets/gp-player-tournaments-history.js }
 

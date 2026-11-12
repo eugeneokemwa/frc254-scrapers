@@ -1,0 +1,26 @@
+# Whole-tournament PGNs from chess-results.com: the Kenyan tournaments of this season (assets/gp-player-tournaments.js) and of 2020-2025
+# (assets/gp-player-tournaments-history.js, merged from the "Games history" players shards), and the chess-results links in the chats.
+# 12 runners, each its own machine, share the list; each stops cleanly if chess-results refuses it. Results are artifacts.
+name: Tournament PGNs
+on: workflow_dispatch
+permissions:
+  contents: read
+
+jobs:
+  tournaments:
+    runs-on: ubuntu-latest
+    timeout-minutes: 300
+    strategy: { fail-fast: false, matrix: { shard: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12] } }
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with: { python-version: "3.12" }
+      - run: pip install requests
+      - run: |
+          python3 tools/scrape-cr-tournaments.py --threads 2 --list assets/gp-player-tournaments.js assets/gp-player-tournaments-history.js \
+            --extra "$(paste -sd, chat-cr-ids.txt)" --shard ${{ matrix.shard }}/12 || echo "stopped early (exit $?)"
+          mkdir -p out && cp tools/cache/cr-tnr/*.pgn out/ 2>/dev/null; for f in $(git ls-files tools/cache/cr-tnr); do rm -f "out/$(basename $f)"; done
+          cp tools/cache/cr-tnr/none.txt out/none-${{ matrix.shard }}.txt
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with: { name: "tnr-${{ matrix.shard }}", path: out, if-no-files-found: ignore }
