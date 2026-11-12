@@ -66,34 +66,50 @@ def name_near(cells, i, step):
         k += step
     return ""
 
+def cells_of(row, tags="td"):
+    return [html.unescape(re.sub(r"<[^>]*>", "", c)).strip() for c in re.findall(rf"<(?:{tags})[^>]*>(.*?)</(?:{tags})>", row, re.S)]
+
+def boards(page, rd):
+    """The boards of a pairings page: (round, White, Black, result, game id or None). The table's header row names the columns ("White",
+    "Black", "Result"), which differ by tournament (title, "Typ" group, club, rating and points columns come and go), so the names are
+    read from the columns the header gives. A round robin lists every round on one page under "Round N on <date>" rows."""
+    out, col = [], None
+    for cls, row in re.findall(r'<tr class="(CRg1b|CRg1|CRg2)[^"]*">(.*?)</tr>', page, re.S):
+        if cls == "CRg1b":
+            head = cells_of(row, "th|td")
+            m = re.match(r"Round (\d+)\b", head[0]) if len(head) == 1 else None
+            if m: rd = int(m.group(1))
+            elif "White" in head and "Black" in head and "Result" in head: col = (head.index("White"), head.index("Black"), head.index("Result"), len(head))
+            continue
+        c = cells_of(row)
+        link = re.search(r'PartieSuche\.aspx\?art=36&amp;id=(\d+)', row)
+        if col and len(c) == col[3] and c[col[2]] in RES: w, b, res = c[col[0]], c[col[1]], c[col[2]]
+        else:   # no header to go by: the nearest name-like cells either side of the result
+            i = next((k for k, x in enumerate(c) if x in RES), None)
+            if i is None: continue
+            w, b, res = name_near(c, i, -1), name_near(c, i, 1), c[i]
+        if w and b: out.append((rd, w, b, res, link.group(1) if link else None))
+    return out
+
 def by_game(sess, t, rounds):
     """PGN text of a tournament built from per-game links; "" if the pairings list none. A game is taken once, however many round pages
-    list it (a team tournament's pages can repeat every board)."""
+    list it (a round robin's page repeats every round)."""
     out, seen = [], set()
     for rd in range(1, (rounds or 15) + 1):   # rounds unknown (a chat link): until a round has no pairings
         r = get(sess, f"https://chess-results.com/tnr{t}.aspx?lan=1&art=2&rd={rd}&turdet=NO")
         if r is None: continue
         if not rounds and not re.search(r'<tr class="CRg[12]">', r.text): break
-        for row in re.findall(r'<tr class="CRg[12]">.*?</tr>', r.text, re.S):
-            link = re.search(r'PartieSuche\.aspx\?art=36&amp;id=(\d+)', row)
-            if not link or link.group(1) in seen: continue
-            cells = [html.unescape(re.sub(r"<[^>]*>", "", c)).strip() for c in re.findall(r"<td[^>]*>(.*?)</td>", row, re.S)]
-            i = next((k for k, c in enumerate(cells) if c in RES), None)
-            if i is None: continue
-            seen.add(link.group(1))
-            g = get(sess, f"https://chess-results.com/PartieSuche.aspx?art=36&id={link.group(1)}&lan=1")
+        for brd, white, black, res, gid in boards(r.text, rd):
+            if not gid or gid in seen: continue
+            seen.add(gid)
+            g = get(sess, f"https://chess-results.com/PartieSuche.aspx?art=36&id={gid}&lan=1")
             if g is None: continue
             mv = [re.sub(r"^\d+\.\s*", "", html.unescape(x).strip()) for x in re.findall(r'<a class="game0"[^>]*>([^<]+)</a>', g.text)]
             h = re.search(r"<br>(?:(.*?), )?(\d\d)\.(\d\d)\.(\d{4})</p>", g.text, re.S)
             if not mv or not h: continue
-            # The game page heads the moves with "White - Black<br>Event, date": its names win over the table's.
-            pp = re.search(r">([^<>]+?) - ([^<>]+?)<br>(?:[^<]*?, )?\d\d\.\d\d\.\d{4}</p>", g.text, re.S)
-            white, black = (html.unescape(pp.group(1)).strip(), html.unescape(pp.group(2)).strip()) if pp else ("", "")
-            if not NAMEISH.search(white) or not NAMEISH.search(black): white, black = name_near(cells, i, -1), name_near(cells, i, 1)
-            if not white or not black: continue
             ev, d, mo, y = h.groups(); ev = ev or D["tournaments"][t]["n"]
             text = " ".join((f"{k // 2 + 1}. " if k % 2 == 0 else "") + m for k, m in enumerate(mv))
-            out.append(f'[Event "{ev.strip()}"]\n[Date "{y}.{mo}.{d}"]\n[Round "{rd}"]\n[White "{white}"]\n[Black "{black}"]\n[Result "{RES[cells[i]]}"]\n\n{text} {RES[cells[i]]}\n')
+            out.append(f'[Event "{ev.strip()}"]\n[Date "{y}.{mo}.{d}"]\n[Round "{brd}"]\n[White "{white}"]\n[Black "{black}"]\n[Result "{RES[res]}"]\n\n{text} {RES[res]}\n')
     return "\n".join(out)
 
 def one(t):
