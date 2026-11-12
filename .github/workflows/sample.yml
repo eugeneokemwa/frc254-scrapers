@@ -1,0 +1,17 @@
+# Saves the raw HTML of a few chess-results pages as an artifact, to write parsers against the real layout (a handful of requests).
+name: Sample pages
+on:
+  workflow_dispatch:
+    inputs:
+      urls: { description: "Space-separated URLs", required: true }
+permissions:
+  contents: read
+jobs:
+  sample:
+    runs-on: ubuntu-latest
+    steps:
+      - run: |
+          mkdir pages; i=0
+          for u in ${{ inputs.urls }}; do i=$((i+1)); curl -s -L -A "Mozilla/5.0" -o "pages/$i.html" "$u"; echo "$i $u" >> pages/index.txt; sleep 2; done
+      - uses: actions/upload-artifact@v4
+        with: { name: pages, path: pages }
