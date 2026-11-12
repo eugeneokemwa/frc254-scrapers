@@ -1,0 +1,78 @@
+# Kenyan players' games from chess-results.com (2020-2025 tournament histories, then every Kenyan tournament's PGN) and LiveChessCloud.
+# Run from the Actions tab. chess-results allows 2,000 requests a day per IP: the work is split over many runners (each its own
+# machine) and every scraper stops cleanly if it is refused. Results are artifacts; nothing is committed.
+name: Games history
+on:
+  workflow_dispatch:
+    inputs:
+      from: { description: First tournament end date, default: "2020-01-01" }
+      to: { description: Last tournament end date, default: "2025-12-31" }
+permissions:
+  contents: read
+
+jobs:
+  players:   # each player's tournaments in the date range (about 2 requests a player)
+    runs-on: ubuntu-latest
+    timeout-minutes: 300
+    strategy: { fail-fast: false, matrix: { shard: [1, 2, 3, 4, 5, 6, 7, 8] } }
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with: { python-version: "3.12" }
+      - uses: actions/setup-node@v4
+        with: { node-version: "22" }
+      - run: pip install requests beautifulsoup4
+      - run: python3 tools/scrape-player-tournaments.py --from ${{ inputs.from }} --to ${{ inputs.to }} --shard ${{ matrix.shard }}/8 --out shard-${{ matrix.shard }}.jsonl
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with: { name: "players-${{ matrix.shard }}", path: "shard-${{ matrix.shard }}.jsonl", if-no-files-found: ignore }
+
+  history:   # the shards merged into one list of tournaments and players
+    needs: players
+    if: always()
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with: { pattern: "players-*", path: shards, merge-multiple: true }
+      - run: pip install requests beautifulsoup4
+      - run: python3 tools/scrape-player-tournaments.py --from ${{ inputs.from }} --to ${{ inputs.to }} --final assets/gp-player-tournaments-history.js --merge shards/shard-*.jsonl
+      - uses: actions/upload-artifact@v4
+        with: { name: history, path: assets/gp-player-tournaments-history.js }
+
+  tournaments:   # whole-tournament PGNs: Kenyan tournaments of this season and the history, and the chess-results links in the chats
+    needs: history
+    if: always()
+    runs-on: ubuntu-latest
+    timeout-minutes: 300
+    strategy: { fail-fast: false, matrix: { shard: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12] } }
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with: { python-version: "3.12" }
+      - uses: actions/download-artifact@v4
+        continue-on-error: true
+        with: { name: history, path: assets }
+      - run: pip install requests
+      - run: |
+          before=$(ls tools/cache/cr-tnr | wc -l)
+          python3 tools/scrape-cr-tournaments.py --threads 2 --list assets/gp-player-tournaments.js assets/gp-player-tournaments-history.js \
+            --extra "$(paste -sd, chat-cr-ids.txt)" --shard ${{ matrix.shard }}/12 || echo "stopped early (exit $?)"
+          mkdir -p out && cp -n tools/cache/cr-tnr/*.pgn out/ 2>/dev/null; for f in $(git ls-files tools/cache/cr-tnr); do rm -f "out/$(basename $f)"; done
+          cp tools/cache/cr-tnr/none.txt out/none-${{ matrix.shard }}.txt
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with: { name: "tnr-${{ matrix.shard }}", path: out, if-no-files-found: ignore }
+
+  livechesscloud:   # the DGT live boards linked in the chats (one request per game)
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with: { python-version: "3.12" }
+      - run: pip install requests
+      - run: python3 tools/fetch-livechesscloud.py lcc-ids.txt
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with: { name: lcc, path: tools/cache/lcc, if-no-files-found: ignore }
