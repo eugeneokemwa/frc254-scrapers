@@ -16,7 +16,8 @@ jobs:
       - uses: actions/setup-python@v5
         with: { python-version: "3.12" }
       - run: pip install requests
-      - run: python3 tools/fide-history.py --ids fide-ids.txt --months ${{ inputs.months }} --shard ${{ matrix.shard }}/8 --out hist-${{ matrix.shard }}.json
+      - timeout-minutes: 150
+        run: python3 tools/fide-history.py --ids fide-ids.txt --months ${{ inputs.months }} --shard ${{ matrix.shard }}/8 --out hist-${{ matrix.shard }}.json
       - uses: actions/upload-artifact@v4
         if: always()
         with: { name: "hist-${{ matrix.shard }}", path: "hist-${{ matrix.shard }}.json", if-no-files-found: ignore }

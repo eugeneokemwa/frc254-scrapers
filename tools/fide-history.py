@@ -35,11 +35,14 @@ newest = dt.date.today().replace(day=1)
 def fetch(url, path):
     for i in range(4):
         try:
-            with requests.get(url, stream=True, timeout=300, headers={"User-Agent": "Mozilla/5.0"}) as r:
+            t0 = time.time()
+            with requests.get(url, stream=True, timeout=(30, 60), headers={"User-Agent": "Mozilla/5.0"}) as r:
                 if r.status_code == 404: return False
                 r.raise_for_status()
                 with open(path, "wb") as fh:
-                    for c in r.iter_content(1 << 20): fh.write(c)
+                    for c in r.iter_content(1 << 20):
+                        fh.write(c)
+                        if time.time() - t0 > 600: raise requests.ConnectionError("stalled: over 10 minutes")   # FIDE's server sometimes trickles forever
             if zipfile.is_zipfile(path): return True
         except requests.RequestException as e: print("  retry", url, e, flush=True)
         time.sleep(10 * (i + 1))
