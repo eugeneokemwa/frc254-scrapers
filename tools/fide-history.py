@@ -3,7 +3,7 @@
 (https://ratings.fide.com/download/<kind>_<mon><yy>frl_xml.zip, ~10-40 MB each, one request each; the current month is
 <kind>_rating_list_xml.zip). For "rating at the time of the game": build-gp-games.py reads the merged file into assets/games/elo.json.
 Heavy (gigabytes of downloads): run it on the runner (workflow "FIDE history"), never the phone.
-Usage: fide-history.py --ids ids.txt --months 2020-01:2026-11 [--shard K/N] --out hist.json
+Usage: fide-history.py --ids ids.txt --months 2020-01:2026-11 [--list 2020-01,2021-05] [--shard K/N] --out hist.json
        fide-history.py --merge hist-*.json --out tools/cache/fide-history.json
 Output: {"YYYY-MM": {"standard": {id: rating}, "rapid": {...}, "blitz": {...}}}"""
 import argparse, datetime as dt, json, os, sys, time, zipfile
@@ -12,7 +12,7 @@ import requests
 
 KINDS = ("standard", "rapid", "blitz")
 ap = argparse.ArgumentParser()
-ap.add_argument("--ids"); ap.add_argument("--months", default="2020-01:2026-11"); ap.add_argument("--shard", default="1/1")
+ap.add_argument("--ids"); ap.add_argument("--months", default="2020-01:2026-11"); ap.add_argument("--list", default=""); ap.add_argument("--shard", default="1/1")
 ap.add_argument("--merge", nargs="*"); ap.add_argument("--out", required=True)
 a = ap.parse_args()
 
@@ -29,6 +29,7 @@ lo, hi = a.months.split(":")
 months, d = [], dt.date(int(lo[:4]), int(lo[5:]), 1)
 while d <= dt.date(int(hi[:4]), int(hi[5:]), 1):
     months.append(d); d = (d + dt.timedelta(days=32)).replace(day=1)
+if a.list: months = [dt.date(int(m[:4]), int(m[5:7]), 1) for m in a.list.split(",") if m]   # just these months (a rerun of the gaps)
 k, n = map(int, a.shard.split("/")); months = months[k - 1::n]
 newest = dt.date.today().replace(day=1)
 

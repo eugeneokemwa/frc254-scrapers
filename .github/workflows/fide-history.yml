@@ -5,6 +5,7 @@ on:
   workflow_dispatch:
     inputs:
       months: { description: "First:last month", default: "2020-01:2026-11" }
+      list: { description: "Only these months, comma-separated (a rerun of gaps)", default: "" }
 permissions: { contents: read }
 jobs:
   lists:
@@ -17,7 +18,7 @@ jobs:
         with: { python-version: "3.12" }
       - run: pip install requests
       - timeout-minutes: 150
-        run: python3 tools/fide-history.py --ids fide-ids.txt --months ${{ inputs.months }} --shard ${{ matrix.shard }}/8 --out hist-${{ matrix.shard }}.json
+        run: python3 tools/fide-history.py --ids fide-ids.txt --months ${{ inputs.months }} --list "${{ inputs.list }}" --shard ${{ matrix.shard }}/8 --out hist-${{ matrix.shard }}.json
       - uses: actions/upload-artifact@v4
         if: always()
         with: { name: "hist-${{ matrix.shard }}", path: "hist-${{ matrix.shard }}.json", if-no-files-found: ignore }
