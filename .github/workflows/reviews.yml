@@ -1,0 +1,25 @@
+# Stockfish reviews (the site's lab/reviews/<id>.json.gz) of every game in assets/games/lib/ not listed in reviewed.txt.
+# 120 shards; GitHub runs about 20 at a time, the rest wait their turn. Each stops starting games after 320 minutes so it always uploads
+# what it finished; a rerun (with reviewed.txt refreshed) picks up the rest. Results are artifacts; nothing is committed.
+name: Game reviews
+on:
+  workflow_dispatch:
+    inputs:
+      level: { description: "Engine depth (quick 14, standard 18, deep 22)", default: quick }
+permissions: { contents: read }
+jobs:
+  analyse:
+    runs-on: ubuntu-latest
+    timeout-minutes: 350
+    strategy:
+      fail-fast: false
+      matrix: { shard: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31, 32, 33, 34, 35, 36, 37, 38, 39, 40, 41, 42, 43, 44, 45, 46, 47, 48, 49, 50, 51, 52, 53, 54, 55, 56, 57, 58, 59, 60, 61, 62, 63, 64, 65, 66, 67, 68, 69, 70, 71, 72, 73, 74, 75, 76, 77, 78, 79, 80, 81, 82, 83, 84, 85, 86, 87, 88, 89, 90, 91, 92, 93, 94, 95, 96, 97, 98, 99, 100, 101, 102, 103, 104, 105, 106, 107, 108, 109, 110, 111, 112, 113, 114, 115, 116, 117, 118, 119, 120] }
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with: { python-version: "3.12" }
+      - run: sudo apt-get install -y stockfish && pip install chess
+      - run: PATH="/usr/games:$PATH" python3 tools/build-reviews.py --shard ${{ matrix.shard }}/120 --level "${{ inputs.level }}" --skip reviewed.txt --minutes 320 --out out
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with: { name: "reviews-${{ matrix.shard }}", path: out, if-no-files-found: ignore }

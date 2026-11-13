@@ -4,7 +4,9 @@ that have at least 3 of our players and at least a quarter of the field). A tour
 for download" when the organiser uploaded moves; that page posts back a PGN of every game, one request per tournament.
 Tournaments with only a PGN link per game (no download-all link) are read round by round: the pairings pages give White, Black,
 result and the game id of every board, and each game page gives the moves. Writes tools/cache/cr-tnr/<tournament id>.pgn, and lists tournaments with no games in tools/cache/cr-tnr/none.txt (skipped next time).
-Usage: scrape-cr-tournaments.py [--threads 4] [--min-players 3] [--share 0.25] [--all] [--only id,id] [--list FILE...] [--extra id,id] [--shard K/N]
+--abroad: the other tournaments our players played (abroad, or a big open where they were few): only their own games are kept, and a
+tournament with per-game links only fetches the boards of our players. Writes tools/cache/cr-tnr/abroad/<id>.pgn (and its none.txt).
+Usage: scrape-cr-tournaments.py [--abroad] [--threads 4] [--min-players 3] [--share 0.25] [--all] [--only id,id] [--list FILE...] [--extra id,id] [--shard K/N]
   (--all drops the Kenyan filter; --list: player-tournament files, default assets/gp-player-tournaments.js; --extra: tournaments to check
    besides, such as links in the WhatsApp chats; --shard K/N: every N-th tournament, so N Actions runners, each its own IP, share the work)"""
 import argparse, html, json, os, re, sys, urllib.parse
@@ -16,7 +18,9 @@ OUT = os.path.join(HERE, "cache", "cr-tnr"); NONE = os.path.join(OUT, "none.txt"
 ap = argparse.ArgumentParser(); ap.add_argument("--threads", type=int, default=4); ap.add_argument("--min-players", type=int, default=3)
 ap.add_argument("--share", type=float, default=0.25); ap.add_argument("--all", action="store_true"); ap.add_argument("--only", default="")
 ap.add_argument("--list", nargs="+", default=[os.path.join(ROOT, "assets", "gp-player-tournaments.js")]); ap.add_argument("--extra", default=""); ap.add_argument("--shard", default="")
+ap.add_argument("--abroad", action="store_true")
 a = ap.parse_args()
+if a.abroad: OUT = os.path.join(OUT, "abroad"); NONE = os.path.join(OUT, "none.txt")
 os.makedirs(OUT, exist_ok=True)
 
 D = {"players": {}, "tournaments": {}}
@@ -28,8 +32,30 @@ for path in a.list:
 ours = {}
 for lst in D["players"].values():
     for t in set(x[0] for x in lst): ours[t] = ours.get(t, 0) + 1
-todo = [t for t, v in D["tournaments"].items() if a.all or (ours.get(t, 0) >= a.min_players and ours.get(t, 0) / max(v["np"], 1) >= a.share)]
+kenyan = lambda t, v: ours.get(t, 0) >= a.min_players and ours.get(t, 0) / max(v["np"], 1) >= a.share
+todo = [t for t, v in D["tournaments"].items() if ((ours.get(t, 0) and not kenyan(t, v)) if a.abroad else (a.all or kenyan(t, v)))]
+# --abroad: whose games to keep, by name (the pairings and PGNs carry names, not FIDE ids): our players in that tournament
+words = lambda n: frozenset(re.sub(r"[^a-z ]", " ", str(n).lower()).split())
+PEOPLE = {}
+if a.abroad:
+    pj = os.path.join(ROOT, "assets", "gp-players.js")
+    PEOPLE = {k: words(v.get("n", "")) for k, v in json.loads(re.search(r"=\s*(\{.*\})\s*;?\s*$", open(pj, encoding="utf-8").read(), re.S).group(1))["people"].items()}
+in_t = {}
+for fid, lst in D["players"].items():
+    for x in lst: in_t.setdefault(x[0], set()).add(fid)
+def ours_name(t, name):
+    w = words(name)
+    return any(PEOPLE.get(f) and (PEOPLE[f] == w or (len(PEOPLE[f] & w) >= 2 and (PEOPLE[f] <= w or w <= PEOPLE[f]))) for f in in_t.get(t, ()))
+def keep_ours(t, text):
+    """Only the games of a PGN with one of our players in it."""
+    games = re.split(r"\n(?=\[Event )", text.strip())
+    keep = [g for g in games if any(ours_name(t, m.group(1)) for m in re.finditer(r'\[(?:White|Black) "([^"]*)"\]', g))]
+    return "\n\n".join(keep) + ("\n" if keep else "")
 none = set(open(NONE).read().split()) if os.path.exists(NONE) else set()
+if a.abroad:   # already tried as a whole tournament: no games there, or its whole PGN is in the main folder
+    main = os.path.dirname(OUT); mn = os.path.join(main, "none.txt")
+    none |= set(open(mn).read().split()) if os.path.exists(mn) else set()
+    none |= {f[:-4] for f in os.listdir(main) if f.endswith(".pgn")}
 todo = [t for t in todo if t not in none and not os.path.exists(os.path.join(OUT, t + ".pgn"))]
 todo += [t for t in a.extra.split(",") if t and t not in todo and t not in none and not os.path.exists(os.path.join(OUT, t + ".pgn"))]
 for t in todo: D["tournaments"].setdefault(t, {"n": f"Tournament {t}", "rd": 0, "np": 0})   # a chat link no list has: name and rounds read from the pages
@@ -101,6 +127,7 @@ def by_game(sess, t, rounds):
         if not rounds and not re.search(r'<tr class="CRg[12]">', r.text): break
         for brd, white, black, res, gid in boards(r.text, rd):
             if not gid or gid in seen: continue
+            if a.abroad and not (ours_name(t, white) or ours_name(t, black)): continue   # abroad: only our players' boards
             seen.add(gid)
             g = get(sess, f"https://chess-results.com/PartieSuche.aspx?art=36&id={gid}&lan=1")
             if g is None: continue
@@ -120,6 +147,7 @@ def one(t):
     if not m:
         if not re.search(r"PartieSuche\.aspx\?art=36&amp;id=\d+", r.text): return t, "none"
         text = by_game(sess, t, D["tournaments"][t]["rd"] or 0)
+        if a.abroad: text = keep_ours(t, text)
         if "[Event " not in text: return t, "none"
         open(os.path.join(OUT, t + ".pgn"), "w", encoding="utf-8").write(text)
         return t, f"{text.count('[Event ')} games (per game)"
@@ -133,8 +161,10 @@ def one(t):
     try: p = limited(sess.post(urllib.parse.urljoin(r.url, act.group(1).replace("&amp;", "&")), data=f, timeout=180))
     except requests.RequestException: return t, "error"
     if p.status_code != 200 or "[Event " not in p.text: return t, "none"
-    open(os.path.join(OUT, t + ".pgn"), "w", encoding="utf-8").write(p.text)
-    return t, f"{p.text.count('[Event ')} games"
+    text = keep_ours(t, p.text) if a.abroad else p.text
+    if "[Event " not in text: return t, "none"
+    open(os.path.join(OUT, t + ".pgn"), "w", encoding="utf-8").write(text)
+    return t, f"{text.count('[Event ')} games"
 
 res = {"none": 0, "error": 0, "ok": 0}
 with ThreadPoolExecutor(a.threads) as ex:

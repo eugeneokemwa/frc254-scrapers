@@ -1,0 +1,24 @@
+# Kenyan players' games in tournaments abroad (or big opens where they were few), from chess-results.com: only their own games are kept
+# (scrape-cr-tournaments.py --abroad). 12 runners, each its own machine, share the list, far below chess-results' 2,000 requests a day
+# per IP; each stops cleanly if refused. Results are artifacts; nothing is committed.
+name: Games abroad
+on: { workflow_dispatch: {} }
+permissions: { contents: read }
+jobs:
+  abroad:
+    runs-on: ubuntu-latest
+    timeout-minutes: 300
+    strategy: { fail-fast: false, matrix: { shard: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12] } }
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with: { python-version: "3.12" }
+      - run: pip install requests
+      - run: |
+          python3 tools/scrape-cr-tournaments.py --abroad --threads 2 --list assets/gp-player-tournaments.js assets/gp-player-tournaments-history.js \
+            --shard ${{ matrix.shard }}/12 || echo "stopped early (exit $?)"
+          mkdir -p out && cp tools/cache/cr-tnr/abroad/*.pgn out/ 2>/dev/null || true
+          cp tools/cache/cr-tnr/abroad/none.txt out/none-${{ matrix.shard }}.txt 2>/dev/null || true
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with: { name: "abroad-${{ matrix.shard }}", path: out, if-no-files-found: ignore }
