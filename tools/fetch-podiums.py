@@ -186,6 +186,8 @@ def podium(tnr, team):
 
 
 def build(ev):
+    if not ev["links"] and LOCAL_ONLY:
+        return ev["poster"], "error"   # online events need Lichess: not in --local-only
     if not ev["links"]:  # online: Lichess
         url = ev["lichess"][0]
         try:
@@ -200,6 +202,15 @@ def build(ev):
             return ev["poster"], None
         return ev["poster"], {"section": "", "team": False, "source": "lichess", "places": places,
                               "url": url.split("?")[0]}
+    # A league weekend (a team-standings link to a section the League tab holds): the top three teams from the site's own
+    # league data (tools/build-gp-league.py), no request at all. The standings are the latest the site has: the final ones once
+    # the season is over, and the label says which.
+    for l in ev["links"]:
+        lg = league_podium(re.search(r"tnr(\d+)", l["url"]).group(1)) if "art=46" in l["url"] else None
+        if lg:
+            return ev["poster"], lg
+    if LOCAL_ONLY:
+        return ev["poster"], "error"   # keep whatever the event has: nothing is fetched in this mode
     # Highest section first; if it has no published ranking, fall back to
     # the next one rather than leaving the whole event without a podium.
     for best in sorted(ev["links"], key=lambda l: -section_score(l["label"])):
@@ -219,10 +230,43 @@ def build(ev):
                           "url": f"https://chess-results.com/tnr{tnr}.aspx?lan=1&art={46 if team else 1}&turdet=YES"}
 
 
+LEAGUE = {}   # tournament id -> (section, the season's data), from assets/gp-league*.js
+LOCAL_ONLY = False
+
+def load_league():
+    """Every league section the site holds, loaded once before the threads start (they used to race to fill it)."""
+    if not LEAGUE:
+        for f in sorted((ROOT / "assets").glob("gp-league*.js")):
+            if "pairings" in f.name or "view" in f.name:
+                continue
+            m = re.search(r"=\s*(\{.*\})\s*;?\s*$", f.read_text(encoding="utf-8"), re.S)
+            for k, sec in (json.loads(m.group(1)).get("sections") or {}).items() if m else []:
+                LEAGUE[k] = sec
+
+
+def league_podium(tnr):
+    sec = LEAGUE.get(tnr)
+    if not sec or not sec.get("teams"):
+        return None
+    teams = sorted(sec["teams"], key=lambda t: t.get("rk") or 99)[:3]
+    if len(teams) < 3 or not all(t.get("g") for t in teams):
+        return None
+    played = round(sum(t.get("g", 0) for t in sec["teams"]) / 2)
+    total = len(sec["teams"]) * (len(sec["teams"]) - 1) // 2
+    return {"section": f"{sec.get('name', '')} · {'final standings' if played >= total else 'standings so far'}".strip(" ·"), "team": True,
+            "places": [{"rank": t.get("rk") or i + 1, "name": t["n"], "pts": (lambda v: str(int(v)) if isinstance(v, float) and v.is_integer() else str(v))(t.get("mp", "")), **({"rtg": str(t["avg"])} if t.get("avg") else {})}
+                       for i, t in enumerate(teams)],
+            "url": f"https://chess-results.com/tnr{tnr}.aspx?lan=1&art=46&turdet=YES"}
+
+
 def main():
+    global LOCAL_ONLY
     ap = argparse.ArgumentParser()
     ap.add_argument("--poster", type=int, action="append")
+    ap.add_argument("--local-only", action="store_true", help="only what needs no request (league weekends from the site's league data)")
     args = ap.parse_args()
+    LOCAL_ONLY = args.local_only
+    load_league()
     current = {}
     if OUT.exists():
         m = re.search(r"PODIUMS = (\{.*\});", OUT.read_text(), re.S)

@@ -6,7 +6,7 @@ Runs every 6 hours (.github/workflows/sync-results.yml) and by hand.
 
 Two jobs, both for events that have already finished:
 
-1. RESULTS LINKS. A completed event in assets/data.js that has no results link
+1. RESULTS LINKS. A completed or ongoing event in assets/data.js that has no results link
    (no chess-results tournament and no Lichess tournament) is looked up in
    chess-results' tournament database: Kenyan tournaments ending within two days
    either side of the event's dates, matched by name. A confident match is written
@@ -51,9 +51,10 @@ DUMP = r"""
 const d = await import(process.argv[1]);
 const pod = (await import(process.argv[2])).PODIUMS;
 const isRes = (u) => /chess-results\.com\/tnr\d+|lichess\.org\/(tournament|swiss)\/\w+/.test(u || "");
-const past = d.prepare(d.EVENTS).filter((e) => e.status === "past");
+const all = d.prepare(d.EVENTS), past = all.filter((e) => e.status === "past");
+const going = all.filter((e) => e.status === "past" || e.status === "live");   // a results link for an event under way too (its standings)
 console.log(JSON.stringify({
-  noLink: past.filter((e) => !(e.links || []).some((l) => isRes(l.url))).map((e) => ({
+  noLink: going.filter((e) => !(e.links || []).some((l) => isRes(l.url))).map((e) => ({
     poster: e.poster, title: e.title, start: e.start, end: e.end,
     hand: (d.EVENTS.find((x) => x.poster === e.poster) || {}).links?.some((l) => isRes(l.url)) || false })),
   noPodium: past.filter((e) => (e.links || []).some((l) => isRes(l.url)) && !pod[e.poster]).map((e) => e.poster),

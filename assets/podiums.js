@@ -306,6 +306,31 @@ export const PODIUMS = {
   ],
   "url": "https://chess-results.com/tnr1536460.aspx?lan=1&art=1&turdet=YES"
  },
+ "17": {
+  "section": "Premier League · final standings",
+  "team": true,
+  "places": [
+   {
+    "rank": 1,
+    "name": "Mavens Tacticians",
+    "pts": "46",
+    "rtg": "2080"
+   },
+   {
+    "rank": 2,
+    "name": "KCB Chess Club",
+    "pts": "37",
+    "rtg": "2063"
+   },
+   {
+    "rank": 3,
+    "name": "Equity Chess Club",
+    "pts": "36",
+    "rtg": "2190"
+   }
+  ],
+  "url": "https://chess-results.com/tnr1380528.aspx?lan=1&art=46&turdet=YES"
+ },
  "18": {
   "section": "U15 & U17 Open",
   "team": false,
@@ -1307,6 +1332,56 @@ export const PODIUMS = {
   ],
   "url": "https://chess-results.com/tnr1484889.aspx?lan=1&art=1&turdet=YES"
  },
+ "63": {
+  "section": "Super League A · standings so far",
+  "team": true,
+  "places": [
+   {
+    "rank": 1,
+    "name": "Nacha Royals",
+    "pts": "66",
+    "rtg": "1793"
+   },
+   {
+    "rank": 2,
+    "name": "Litlife House Chess Club",
+    "pts": "64",
+    "rtg": "1803"
+   },
+   {
+    "rank": 3,
+    "name": "Sataranji Africa",
+    "pts": "64",
+    "rtg": "1839"
+   }
+  ],
+  "url": "https://chess-results.com/tnr1380526.aspx?lan=1&art=46&turdet=YES"
+ },
+ "64": {
+  "section": "Super League B · standings so far",
+  "team": true,
+  "places": [
+   {
+    "rank": 1,
+    "name": "Black Knights Dark Whites",
+    "pts": "64",
+    "rtg": "1731"
+   },
+   {
+    "rank": 2,
+    "name": "Karen Chess Club",
+    "pts": "64",
+    "rtg": "1789"
+   },
+   {
+    "rank": 3,
+    "name": "Mombasa Chess Club",
+    "pts": "63",
+    "rtg": "1748"
+   }
+  ],
+  "url": "https://chess-results.com/tnr1380837.aspx?lan=1&art=46&turdet=YES"
+ },
  "66": {
   "section": "",
   "team": false,
@@ -1993,6 +2068,31 @@ export const PODIUMS = {
   ],
   "url": "https://chess-results.com/tnr1526171.aspx?lan=1&art=1&turdet=YES"
  },
+ "106": {
+  "section": "Premier League · final standings",
+  "team": true,
+  "places": [
+   {
+    "rank": 1,
+    "name": "Mavens Tacticians",
+    "pts": "46",
+    "rtg": "2080"
+   },
+   {
+    "rank": 2,
+    "name": "KCB Chess Club",
+    "pts": "37",
+    "rtg": "2063"
+   },
+   {
+    "rank": 3,
+    "name": "Equity Chess Club",
+    "pts": "36",
+    "rtg": "2190"
+   }
+  ],
+  "url": "https://chess-results.com/tnr1380528.aspx?lan=1&art=46&turdet=YES"
+ },
  "110": {
   "section": "Blitz",
   "team": false,
@@ -2048,6 +2148,31 @@ export const PODIUMS = {
    }
   ],
   "url": "https://chess-results.com/tnr1526086.aspx?lan=1&art=1&turdet=YES"
+ },
+ "113": {
+  "section": "Super League Playoffs · final standings",
+  "team": true,
+  "places": [
+   {
+    "rank": 1,
+    "name": "Karen Chess Club",
+    "pts": "10",
+    "rtg": "1780"
+   },
+   {
+    "rank": 2,
+    "name": "Sataranji Africa",
+    "pts": "9",
+    "rtg": "1839"
+   },
+   {
+    "rank": 3,
+    "name": "Black Knights Dark Whites",
+    "pts": "9",
+    "rtg": "1776"
+   }
+  ],
+  "url": "https://chess-results.com/tnr1499539.aspx?lan=1&art=46&turdet=YES"
  },
  "118": {
   "section": "U17",
@@ -2781,7 +2906,7 @@ export const PODIUMS = {
     "rank": 3,
     "name": "nyamu_brayan",
     "pts": "2",
-    "rtg": "1754",
+    "rtg": "1776",
     "perf": "1594"
    }
   ],
@@ -2794,20 +2919,20 @@ export const PODIUMS = {
    {
     "rank": 1,
     "name": "Stanley, Muli",
-    "pts": "4",
-    "perf": "1640"
+    "pts": "5",
+    "perf": "1673"
    },
    {
     "rank": 2,
     "name": "Eugene, Otieno",
-    "pts": "4",
-    "perf": "1640"
+    "pts": "5",
+    "perf": "1673"
    },
    {
     "rank": 3,
-    "name": "Sharlys, Stacy",
-    "pts": "4",
-    "perf": "1640"
+    "name": "Sharlyns, Stacy",
+    "pts": "5",
+    "perf": "1673"
    }
   ],
   "url": "https://chess-results.com/tnr1536043.aspx?lan=1&art=1&turdet=YES"
@@ -2840,5 +2965,116 @@ export const PODIUMS = {
    }
   ],
   "url": "https://lichess.org/tournament/C6hA1paZ"
+ },
+ "164": {
+  "section": "Premier League · final standings",
+  "team": true,
+  "places": [
+   {
+    "rank": 1,
+    "name": "Mavens Tacticians",
+    "pts": "46",
+    "rtg": "2080"
+   },
+   {
+    "rank": 2,
+    "name": "KCB Chess Club",
+    "pts": "37",
+    "rtg": "2063"
+   },
+   {
+    "rank": 3,
+    "name": "Equity Chess Club",
+    "pts": "36",
+    "rtg": "2190"
+   }
+  ],
+  "url": "https://chess-results.com/tnr1380528.aspx?lan=1&art=46&turdet=YES"
+ },
+ "166": {
+  "section": "Blitz",
+  "team": false,
+  "places": [
+   {
+    "rank": 1,
+    "name": "Karani, Ezekiel",
+    "pts": "10",
+    "rtg": "2039",
+    "perf": "2394"
+   },
+   {
+    "rank": 2,
+    "name": "Nelson, Namasa",
+    "pts": "9",
+    "rtg": "1697",
+    "perf": "1869"
+   },
+   {
+    "rank": 3,
+    "name": "Isaiah, Otieno Oluoch",
+    "pts": "8",
+    "rtg": "1801",
+    "perf": "1773"
+   }
+  ],
+  "url": "https://chess-results.com/tnr1537408.aspx?lan=1&art=1&turdet=YES"
+ },
+ "167": {
+  "section": "",
+  "team": false,
+  "source": "lichess",
+  "places": [
+   {
+    "rank": 1,
+    "name": "RTGM2000",
+    "pts": "29",
+    "rtg": "2304",
+    "perf": "2245"
+   },
+   {
+    "rank": 2,
+    "name": "francobrian",
+    "pts": "23",
+    "rtg": "1889",
+    "perf": "2170"
+   },
+   {
+    "rank": 3,
+    "name": "Thee_ghettoboy",
+    "pts": "23",
+    "rtg": "1980",
+    "perf": "1863"
+   }
+  ],
+  "url": "https://lichess.org/tournament/LXu07wFm"
+ },
+ "168": {
+  "section": "",
+  "team": false,
+  "source": "lichess",
+  "places": [
+   {
+    "rank": 1,
+    "name": "Simplebasics",
+    "pts": "7.5",
+    "rtg": "2120",
+    "perf": "2306"
+   },
+   {
+    "rank": 2,
+    "name": "RaulAli9",
+    "pts": "7",
+    "rtg": "1945",
+    "perf": "2050"
+   },
+   {
+    "rank": 3,
+    "name": "Ellycheru",
+    "pts": "7",
+    "rtg": "2287",
+    "perf": "2175"
+   }
+  ],
+  "url": "https://lichess.org/swiss/eSUtCyU6"
  }
 };
