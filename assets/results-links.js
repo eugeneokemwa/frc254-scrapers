@@ -2,6 +2,44 @@
    Results links for completed events that have none in data.js, found on chess-results
    by name and date. data.js merges these into the event's links. Keyed by poster number. */
 export const RESULTS_LINKS = {
+ "42": [
+  {
+   "label": "Results",
+   "url": "https://chess-results.com/tnr1540160.aspx?lan=1&art=1&turdet=YES"
+  }
+ ],
+ "97": [
+  {
+   "label": "Results",
+   "url": "https://chess-results.com/tnr1540224.aspx?lan=1&art=1&turdet=YES"
+  }
+ ],
+ "98": [
+  {
+   "label": "Results (section 1)",
+   "url": "https://chess-results.com/tnr1540221.aspx?lan=1&art=1&turdet=YES"
+  },
+  {
+   "label": "Results (section 2)",
+   "url": "https://chess-results.com/tnr1540218.aspx?lan=1&art=1&turdet=YES"
+  },
+  {
+   "label": "Results (section 3)",
+   "url": "https://chess-results.com/tnr1540217.aspx?lan=1&art=1&turdet=YES"
+  },
+  {
+   "label": "Results (section 4)",
+   "url": "https://chess-results.com/tnr1540216.aspx?lan=1&art=1&turdet=YES"
+  },
+  {
+   "label": "Results (section 5)",
+   "url": "https://chess-results.com/tnr1540215.aspx?lan=1&art=1&turdet=YES"
+  },
+  {
+   "label": "Results (section 6)",
+   "url": "https://chess-results.com/tnr1540214.aspx?lan=1&art=1&turdet=YES"
+  }
+ ],
  "166": [
   {
    "label": "Results (Blitz)",

@@ -175,8 +175,10 @@ def main():
         if hits:
             taken = []
             out = []
-            for tnr, name in hits[:MAX_LINKS]:
-                lab = label_for(name, et, taken)
+            labs = [label_for(n, et, []) for _, n in hits[:MAX_LINKS]]
+            alike = len(hits[:MAX_LINKS]) > 1 and len(set(labs)) == 1   # sections chess-results cut to one name: number them
+            for k, (tnr, name) in enumerate(hits[:MAX_LINKS]):
+                lab = f"Results (section {k + 1})" if alike else label_for(name, et, taken)
                 taken.append(lab)
                 out.append({"label": lab, "url": RESULT_URL.format(t=tnr)})
                 used.add(tnr)
