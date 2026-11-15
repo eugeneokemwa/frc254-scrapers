@@ -1,0 +1,19 @@
+# Rebuilds the site's Grand Prix snapshot (assets/gp-data.js) off the phone. Result is an artifact to copy into the site.
+name: GP data
+on: workflow_dispatch
+permissions:
+  contents: read
+concurrency: { group: gp-data, cancel-in-progress: false }
+jobs:
+  gp:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with: { python-version: "3.12" }
+      - run: python3 tools/build-gp-data.py
+      - uses: actions/upload-artifact@v4
+        with:
+          name: gp-data
+          path: assets/gp-data.js
