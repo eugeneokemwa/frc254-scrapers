@@ -6,12 +6,19 @@ name: Event results
 on: workflow_dispatch
 permissions:
   contents: read
+concurrency: { group: event-results, cancel-in-progress: false }
 jobs:
   results:
     runs-on: ubuntu-latest
     timeout-minutes: 60
     steps:
       - uses: actions/checkout@v4
+      # The site's current data from the live site, so a run needs no push first. data.js is required; a missing league file only warns.
+      - name: Fetch the site's current data
+        run: |
+          base=https://frc254.vercel.app/assets
+          for f in data.js results-links.js podiums.js; do curl -fsSL --retry 3 -o "assets/$f" "$base/$f"; done
+          for f in gp-league.js gp-league-2025.js; do curl -fsSL --retry 3 -o "assets/$f" "$base/$f" || echo "::warning::could not fetch $f"; done
       - uses: actions/setup-python@v5
         with: { python-version: "3.12" }
       - uses: actions/setup-node@v4

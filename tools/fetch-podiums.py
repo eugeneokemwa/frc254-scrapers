@@ -21,6 +21,7 @@ import argparse
 import concurrent.futures as cf
 import html
 import json
+import os
 import re
 import subprocess
 import sys
@@ -134,9 +135,12 @@ def text(cell):
     return html.unescape(re.sub(r"<[^>]+>", "", cell)).replace("\xa0", " ").strip()
 
 
-def podium(tnr, team):
-    art = 46 if team else 1
-    page = fetch(f"https://chess-results.com/tnr{tnr}.aspx?lan=1&art={art}&turdet=YES")
+def ranking_url(tnr, team):
+    return f"https://chess-results.com/tnr{tnr}.aspx?lan=1&art={46 if team else 1}&turdet=YES"
+
+
+def podium(tnr, team, page=None):
+    page = page or fetch(ranking_url(tnr, team))
     heads = [text(h) for h in re.findall(r"<h2[^>]*>(.*?)</h2>", page, re.S)]
     # Organisers often leave a finished event at "Rank after Round N" and never
     # re-publish it as final; for a completed event that table is the result.
@@ -211,13 +215,32 @@ def build(ev):
             return ev["poster"], lg
     if LOCAL_ONLY:
         return ev["poster"], "error"   # keep whatever the event has: nothing is fetched in this mode
+    links, pages, names = ev["links"], {}, {}
+    if len(links) > 1 and len({section_score(l["label"]) for l in links}) == 1:
+        # The labels don't tell the sections apart ("Results (section N)"): name each section by its page's first <h2>
+        # (the tournament title), from the page podium() reads anyway and is handed, so one request per section at most.
+        for l in links:
+            try:
+                pages[l["url"]] = fetch(ranking_url(re.search(r"tnr(\d+)", l["url"]).group(1), "art=46" in l["url"]))
+            except Exception:
+                continue  # unnamed (podium() retries the fetch if it gets there)
+            m = re.search(r"<h2[^>]*>(.*?)</h2>", pages[l["url"]], re.S)
+            if m and text(m.group(1)) and not re.match(r"(final ranking|rank after|ranking|starting rank)", text(m.group(1)), re.I):
+                names[l["url"]] = text(m.group(1)).split()  # a ranking caption first means the page has no title: unnamed
+        if len(names) < len(links):
+            names = {}  # a section went unnamed: rank them all by label, as before, never titles against labels
+        # Drop the words every title shares ("U18 Open", not the event name), but the shortest keeps its last word ("U12" vs "U12 Girls");
+        # identical titles are kept whole.
+        distinct = names and len({tuple(w) for w in names.values()}) == len(names)
+        common = min(len(os.path.commonprefix(list(names.values()))), min(map(len, names.values())) - 1) if distinct else 0
+        names = {u: " ".join(w[common:]).strip(" -–—:,·") or " ".join(w) for u, w in names.items()}
     # Highest section first; if it has no published ranking, fall back to
     # the next one rather than leaving the whole event without a podium.
-    for best in sorted(ev["links"], key=lambda l: -section_score(l["label"])):
+    for best in sorted(links, key=lambda l: -section_score(names.get(l["url"], l["label"]))):
         tnr = re.search(r"tnr(\d+)", best["url"]).group(1)
         team = "art=46" in best["url"]
         try:
-            places = podium(tnr, team)
+            places = podium(tnr, team, pages.get(best["url"]))
         except Exception as exc:  # network hiccup: keep the previous entry
             print(f"  {ev['poster']}: fetch failed ({exc})", file=sys.stderr)
             return ev["poster"], "error"
@@ -225,9 +248,8 @@ def build(ev):
             break
     else:
         return ev["poster"], None
-    section = re.sub(r"\b(results|standings)\b", "", best["label"], flags=re.I).strip(" ()") or ""
-    return ev["poster"], {"section": section, "team": team, "places": places,
-                          "url": f"https://chess-results.com/tnr{tnr}.aspx?lan=1&art={46 if team else 1}&turdet=YES"}
+    section = names.get(best["url"]) or re.sub(r"\b(results|standings)\b", "", best["label"], flags=re.I).strip(" ()") or ""
+    return ev["poster"], {"section": section, "team": team, "places": places, "url": ranking_url(tnr, team)}
 
 
 LEAGUE = {}   # tournament id -> (section, the season's data), from assets/gp-league*.js
@@ -272,7 +294,13 @@ def main():
         m = re.search(r"PODIUMS = (\{.*\});", OUT.read_text(), re.S)
         if m:
             current = {int(k): v for k, v in json.loads(m.group(1)).items()}
-    todo = [e for e in events() if not args.poster or e["poster"] in args.poster]
+    # The runner has no assets/gp-league*.js: a league podium (league_podium()'s label) whose section isn't loaded is kept as it is,
+    # never refetched from chess-results or dropped.
+    kept = sorted(p for p, v in current.items() if v.get("team") and re.search(r" · (final standings|standings so far)$", v.get("section", ""))
+                  and re.search(r"tnr(\d+)", v.get("url", "")).group(1) not in LEAGUE)
+    if kept:
+        print(f"no league data for {len(kept)} league podiums, kept as they are: {', '.join(map(str, kept))}")
+    todo = [e for e in events() if (not args.poster or e["poster"] in args.poster) and e["poster"] not in kept]
     with cf.ThreadPoolExecutor(3) as ex:
         for poster, result in ex.map(build, todo):
             if result == "error":
@@ -282,12 +310,14 @@ def main():
             else:
                 current.pop(poster, None)
     body = json.dumps({str(k): current[k] for k in sorted(current)}, ensure_ascii=False, indent=1)
-    OUT.write_text(
+    tmp = OUT.with_name(OUT.name + ".tmp")  # written whole, then swapped in: a killed run never leaves a cut podiums.js
+    tmp.write_text(
         "/* GENERATED by tools/fetch-podiums.py — do not edit by hand.\n"
         "   Top three of each completed event's highest section, from the\n"
         "   chess-results final ranking (or Lichess for online events), with\n"
         "   performance ratings. Keyed by poster number. */\n"
         f"export const PODIUMS = {body};\n")
+    os.replace(tmp, OUT)
     print(f"podiums.js: {len(current)} events with a podium ({len(todo)} checked)")
 
 

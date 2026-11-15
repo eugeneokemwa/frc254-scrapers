@@ -7,7 +7,8 @@ Runs every 6 hours (.github/workflows/sync-results.yml) and by hand.
 Two jobs, both for events that have already finished:
 
 1. RESULTS LINKS. A completed or ongoing event in assets/data.js that has no results link
-   (no chess-results tournament and no Lichess tournament) is looked up in
+   (no chess-results tournament, Lichess tournament, or chess.com arena or
+   tournament, kept by hand in data.js) is looked up in
    chess-results' tournament database: Kenyan tournaments ending within two days
    either side of the event's dates, matched by name. A confident match is written
    to assets/results-links.js, which data.js merges into the event's links, so the
@@ -50,20 +51,23 @@ MAX_LINKS = 8
 DUMP = r"""
 const d = await import(process.argv[1]);
 const pod = (await import(process.argv[2])).PODIUMS;
-const isRes = (u) => /chess-results\.com\/tnr\d+|lichess\.org\/(tournament|swiss)\/\w+/.test(u || "");
+// any results page, so the event needs no search; only links kept by hand in data.js count,
+// not the ones results-links.js adds, or every found link would be dropped at the next run
+const isResultsPage = (u) => /chess-results\.com\/tnr\d+|lichess\.org\/(tournament|swiss)\/\w+|\/\/(www\.)?chess\.com\/(play\/arena\/\d+|tournament\/)/.test(u || "");
+// what tools/fetch-podiums.py can build a Top 3 from
+const isPodiumSource = (u) => /chess-results\.com\/tnr\d+|lichess\.org\/(tournament|swiss)\/\w+/.test(u || "");
+const hand = new Set(d.EVENTS.filter((e) => (e.links || []).some((l) => isResultsPage(l.url))).map((e) => e.poster));
 const all = d.prepare(d.EVENTS), past = all.filter((e) => e.status === "past");
 const going = all.filter((e) => e.status === "past" || e.status === "live");   // a results link for an event under way too (its standings)
 console.log(JSON.stringify({
-  noLink: going.filter((e) => !(e.links || []).some((l) => isRes(l.url))).map((e) => ({
-    poster: e.poster, title: e.title, start: e.start, end: e.end,
-    hand: (d.EVENTS.find((x) => x.poster === e.poster) || {}).links?.some((l) => isRes(l.url)) || false })),
-  noPodium: past.filter((e) => (e.links || []).some((l) => isRes(l.url)) && !pod[e.poster]).map((e) => e.poster),
+  noLink: going.filter((e) => !hand.has(e.poster)).map((e) => ({ poster: e.poster, title: e.title, start: e.start, end: e.end })),
+  noPodium: past.filter((e) => (e.links || []).some((l) => isPodiumSource(l.url)) && !pod[e.poster]).map((e) => e.poster),
   usedTnr: [...new Set(d.EVENTS.flatMap((e) => (e.links || []).map((l) => (/tnr(\d+)/.exec(l.url || "") || [])[1]).filter(Boolean)))],
 }));
 """
 
 STOP = {"chess", "championship", "championships", "tournament", "tournaments", "edition", "annual",
-        "the", "and", "for", "2026", "kenya", "open", "section", "results"}
+        "the", "and", "for", "2026", "kenya", "open", "section", "results", "ed", "edn"}
 
 
 def node_state():
@@ -74,7 +78,12 @@ def node_state():
 
 
 def tokens(text):
-    return {w for w in re.findall(r"[a-z0-9]+", text.lower().replace("’", "").replace("'", "")) if len(w) >= 3 and w not in STOP}
+    t = text.lower().replace("’", "").replace("'", "")
+    # "6th", "Edition 6" and "Ed.6" all become the token "no6": a series' editions then match by number,
+    # and edition 5 is not taken for edition 6 (a bare "6" is too short to be a word)
+    t = re.sub(r"\b(\d{1,3})(?:st|nd|rd|th)\b", r"no\1", t)
+    t = re.sub(r"\b(?:edition|edn|ed)\W*(\d{1,3})\b", r"edition no\1", t)
+    return {w for w in re.findall(r"[a-z0-9]+", t) if len(w) >= 3 and w not in STOP}
 
 
 def similar(a, b):
@@ -129,7 +138,7 @@ def write(links):
 
 
 def label_for(cand_name, event_tokens, taken):
-    extra = [w for w in re.findall(r"[A-Za-z0-9&]+", cand_name) if w.lower() not in event_tokens and w.lower() not in STOP]
+    extra = [w for w in re.findall(r"[A-Za-z0-9&]+", cand_name) if not tokens(w) & event_tokens and w.lower() not in STOP]
     label = f"Results ({' '.join(extra[:3])})" if extra else "Results"
     if label in taken:
         label += f" {len(taken) + 1}"
@@ -152,8 +161,6 @@ def main():
     links, notes = dict(existing), []
     for ev in state["noLink"]:
         key = str(ev["poster"])
-        if ev["hand"]:
-            continue
         if key in existing:       # already found on an earlier run
             continue
         d0 = dt.date.fromisoformat(ev["start"]) - dt.timedelta(days=WINDOW_DAYS)
