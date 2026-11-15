@@ -53,8 +53,8 @@ def events():
 def section_score(label):
     l = (label or "").lower()
     s = 0
-    ages = [int(a) for a in re.findall(r"\bu-?(\d{1,2})\b", l)]
-    caps = [int(r) for r in re.findall(r"\bu-?(\d{4})\b", l)]
+    ages = [int(a) for a in re.findall(r"\b(?:u-?|under[- ]?)(\d{1,2})\b", l)]  # "U16", "u-16", "Under 16"
+    caps = [int(r) for r in re.findall(r"\b(?:u-?|under[- ]?)(\d{4})\b", l)]
     if caps:
         s = 600 + max(caps) // 10
     elif ages:
@@ -227,12 +227,12 @@ def build(ev):
             m = re.search(r"<h2[^>]*>(.*?)</h2>", pages[l["url"]], re.S)
             if m and text(m.group(1)) and not re.match(r"(final ranking|rank after|ranking|starting rank)", text(m.group(1)), re.I):
                 names[l["url"]] = text(m.group(1)).split()  # a ranking caption first means the page has no title: unnamed
-        if len(names) < len(links):
-            names = {}  # a section went unnamed: rank them all by label, as before, never titles against labels
-        # Drop the words every title shares ("U18 Open", not the event name), but the shortest keeps its last word ("U12" vs "U12 Girls");
-        # identical titles are kept whole.
-        distinct = names and len({tuple(w) for w in names.values()}) == len(names)
-        common = min(len(os.path.commonprefix(list(names.values()))), min(map(len, names.values())) - 1) if distinct else 0
+        if len(names) < len(links) or len({tuple(w) for w in names.values()}) < len(names):
+            names = {}  # a section unnamed, or two titles alike: rank them all by label, as before, never titles against labels
+        # Drop the words every title shares ("U18 Open", not the event name), but the shortest keeps its last word ("U12" vs "U12 Girls").
+        common = min(len(os.path.commonprefix(list(names.values()))), min(map(len, names.values())) - 1) if names else 0
+        while common and any(w[common].isdigit() for w in names.values()):
+            common -= 1  # a bare number keeps the word before it: "Under 16", not "16"
         names = {u: " ".join(w[common:]).strip(" -–—:,·") or " ".join(w) for u, w in names.items()}
     # Highest section first; if it has no published ranking, fall back to
     # the next one rather than leaving the whole event without a podium.

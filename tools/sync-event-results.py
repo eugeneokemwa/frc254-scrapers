@@ -6,9 +6,10 @@ Runs every 6 hours (.github/workflows/sync-results.yml) and by hand.
 
 Two jobs, both for events that have already finished:
 
-1. RESULTS LINKS. A completed or ongoing event in assets/data.js that has no results link
-   (no chess-results tournament, Lichess tournament, or chess.com arena or
-   tournament, kept by hand in data.js) is looked up in
+1. RESULTS LINKS. A completed or ongoing event in assets/data.js (not a training
+   session, not cancelled) that has no results link (no chess-results tournament,
+   Lichess tournament, or chess.com arena or tournament, kept by hand in data.js)
+   is looked up in
    chess-results' tournament database: Kenyan tournaments ending within two days
    either side of the event's dates, matched by name. A confident match is written
    to assets/results-links.js, which data.js merges into the event's links, so the
@@ -60,7 +61,8 @@ const hand = new Set(d.EVENTS.filter((e) => (e.links || []).some((l) => isResult
 const all = d.prepare(d.EVENTS), past = all.filter((e) => e.status === "past");
 const going = all.filter((e) => e.status === "past" || e.status === "live");   // a results link for an event under way too (its standings)
 console.log(JSON.stringify({
-  noLink: going.filter((e) => !hand.has(e.poster)).map((e) => ({ poster: e.poster, title: e.title, start: e.start, end: e.end })),
+  // as tools/session-check.py: training sessions and cancelled events have no results to search for
+  noLink: going.filter((e) => !hand.has(e.poster) && e.type !== "training" && !e.cancelled).map((e) => ({ poster: e.poster, title: e.title, start: e.start, end: e.end })),
   noPodium: past.filter((e) => (e.links || []).some((l) => isPodiumSource(l.url)) && !pod[e.poster]).map((e) => e.poster),
   usedTnr: [...new Set(d.EVENTS.flatMap((e) => (e.links || []).map((l) => (/tnr(\d+)/.exec(l.url || "") || [])[1]).filter(Boolean)))],
 }));
