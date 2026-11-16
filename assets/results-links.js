@@ -40,10 +40,26 @@ export const RESULTS_LINKS = {
    "url": "https://chess-results.com/tnr1540214.aspx?lan=1&art=1&turdet=YES"
   }
  ],
+ "158": [
+  {
+   "label": "Results (Open)",
+   "url": "https://chess-results.com/tnr1538715.aspx?lan=1&art=1&turdet=YES"
+  },
+  {
+   "label": "Results (Ladies)",
+   "url": "https://chess-results.com/tnr1540970.aspx?lan=1&art=1&turdet=YES"
+  }
+ ],
  "166": [
   {
    "label": "Results (Blitz)",
    "url": "https://chess-results.com/tnr1537408.aspx?lan=1&art=1&turdet=YES"
+  }
+ ],
+ "170": [
+  {
+   "label": "Results (Blitz)",
+   "url": "https://chess-results.com/tnr1538652.aspx?lan=1&art=1&turdet=YES"
   }
  ]
 };

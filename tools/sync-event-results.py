@@ -65,6 +65,8 @@ const going = all.filter((e) => e.status === "past" || e.status === "live");   /
 console.log(JSON.stringify({
   // as tools/session-check.py: training sessions and cancelled events have no results to search for
   noLink: going.filter((e) => !hand.has(e.poster) && e.type !== "training" && !e.cancelled).map((e) => ({ poster: e.poster, title: e.title, start: e.start, end: e.end })),
+  // finished or running events with a chess-results page (own or found): their sibling sections are read from it
+  linked: going.filter((e) => e.type !== "training" && !e.cancelled).map((e) => ({ poster: e.poster, end: e.end, tnrs: (e.links || []).map((l) => (/chess-results\.com\/tnr(\d+)/.exec(l.url || "") || [])[1]).filter(Boolean) })).filter((e) => e.tnrs.length),
   noPodium: past.filter((e) => (e.links || []).some((l) => isPodiumSource(l.url)) && !pod[e.poster]).map((e) => e.poster),
   usedTnr: [...new Set(d.EVENTS.flatMap((e) => (e.links || []).map((l) => (/tnr(\d+)/.exec(l.url || "") || [])[1]).filter(Boolean)))],
 }));
@@ -123,6 +125,17 @@ def search(session, start, end):
             seen.add(m.group(1))
             found.append((m.group(1), a.get_text(strip=True)))
     return found
+
+
+def sections(html):
+    """Sibling sections from the page's 'Tournament selection' row: [(tnr, name)] (the open page itself is not a link)."""
+    soup = BeautifulSoup(html, "html.parser")
+    td = soup.find("td", string=re.compile(r"Tournament selection"))
+    cell = td.find_next_sibling("td") if td else None
+    out = []
+    for a in cell.find_all("a", href=re.compile(r"tnr\d+")) if cell else []:
+        out.append((re.search(r"tnr(\d+)", a["href"]).group(1), a.get_text(strip=True)))
+    return out
 
 
 def read_existing():
@@ -201,8 +214,39 @@ def main():
             notes.append(f"  - {key} {ev['title'][:48]}: no confident match ({len(cands)} candidates)")
         time.sleep(1.5)
 
-    # An event that now has its own link in data.js no longer needs an automatic one.
-    handled = {str(e["poster"]) for e in state["noLink"]}
+    # Sibling sections (U8, Ladies...) of an event's chess-results page, own or found: one page request per recent event.
+    for ev in state["linked"]:
+        key = str(ev["poster"])
+        if dt.date.fromisoformat(ev["end"]) < dt.date.today() - dt.timedelta(days=RECHECK_DAYS):
+            continue
+        out = list(links.get(key, []))
+        if len(out) >= MAX_LINKS:
+            continue
+        try:
+            r = session.get(RESULT_URL.format(t=ev["tnrs"][0]), timeout=40)
+            r.raise_for_status()
+            sibs = sections(r.text)
+        except Exception as exc:
+            print(f"  {key}: sections failed ({exc})", file=sys.stderr)
+            time.sleep(5)
+            continue
+        added = []
+        for tnr, name in sibs:
+            if tnr in used or len(out) >= MAX_LINKS:
+                continue
+            lab = f"Results ({name})" if name else "Results"
+            if lab in [l["label"] for l in out]:
+                lab += f" {len(out) + 1}"
+            out.append({"label": lab, "url": RESULT_URL.format(t=tnr)})
+            used.add(tnr)
+            added.append(f"{tnr} {name[:20]}")
+        if added:
+            links[key] = out
+            notes.append(f"  + {key} sections: " + ", ".join(added))
+        time.sleep(1.5)
+
+    # An event that now has its own link in data.js no longer needs an automatic one (unless its sections were added above).
+    handled = {str(e["poster"]) for e in state["noLink"]} | {str(e["poster"]) for e in state["linked"]}
     links = {k: v for k, v in links.items() if k in handled}
 
     print("\n".join(notes) or "no completed events without a results link")
