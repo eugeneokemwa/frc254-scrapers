@@ -32,6 +32,7 @@ Needs: requests, beautifulsoup4, node.
 import argparse
 import datetime as dt
 import json
+import os
 import re
 import subprocess
 import sys
@@ -48,7 +49,7 @@ UA = "FRC254-site-bot/1.0 (+https://github.com/eugeneokemwa/frc254-site; complet
 RESULT_URL = "https://chess-results.com/tnr{t}.aspx?lan=1&art=1&turdet=YES"
 WINDOW_DAYS = 2
 MAX_LINKS = 8
-RECHECK_DAYS = 14
+RECHECK_DAYS = int(os.environ.get("RECHECK_DAYS", "14"))
 
 DUMP = r"""
 const d = await import(process.argv[1]);

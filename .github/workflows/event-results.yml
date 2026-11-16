@@ -3,7 +3,10 @@
 # Lichess for online events). About 2 requests an event plus 3 per podium: one runner is far below chess-results' daily limit.
 # Results are artifacts (assets/results-links.js, assets/podiums.js) to copy into the site.
 name: Event results
-on: workflow_dispatch
+on:
+  workflow_dispatch:
+    inputs:
+      recheck_days: { description: "Look again for more section links on events that ended this many days ago or less", default: "14" }
 permissions:
   contents: read
 concurrency: { group: event-results, cancel-in-progress: false }
@@ -24,7 +27,8 @@ jobs:
       - uses: actions/setup-node@v4
         with: { node-version: "22" }
       - run: pip install requests beautifulsoup4
-      - run: python3 tools/sync-event-results.py || echo "sync stopped early (exit $?)"
+      - env: { RECHECK_DAYS: "${{ inputs.recheck_days || '14' }}" }
+        run: python3 tools/sync-event-results.py || echo "sync stopped early (exit $?)"
       - run: python3 tools/fetch-podiums.py || echo "podiums stopped early (exit $?)"
       - uses: actions/upload-artifact@v4
         if: always()
