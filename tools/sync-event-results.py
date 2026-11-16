@@ -48,6 +48,7 @@ UA = "FRC254-site-bot/1.0 (+https://github.com/eugeneokemwa/frc254-site; complet
 RESULT_URL = "https://chess-results.com/tnr{t}.aspx?lan=1&art=1&turdet=YES"
 WINDOW_DAYS = 2
 MAX_LINKS = 8
+RECHECK_DAYS = 14
 
 DUMP = r"""
 const d = await import(process.argv[1]);
@@ -163,7 +164,9 @@ def main():
     links, notes = dict(existing), []
     for ev in state["noLink"]:
         key = str(ev["poster"])
-        if key in existing:       # already found on an earlier run
+        prev = existing.get(key, [])
+        # found on an earlier run: look again only while the event is recent, for sections chess-results lists later
+        if prev and dt.date.fromisoformat(ev["end"]) < dt.date.today() - dt.timedelta(days=RECHECK_DAYS):
             continue
         d0 = dt.date.fromisoformat(ev["start"]) - dt.timedelta(days=WINDOW_DAYS)
         d1 = dt.date.fromisoformat(ev["end"]) + dt.timedelta(days=WINDOW_DAYS)
@@ -182,11 +185,11 @@ def main():
             if ratio >= 0.8 and shared >= 2:
                 hits.append((tnr, name))
         if hits:
-            taken = []
-            out = []
+            out = list(prev)       # earlier links stay as they are; only missing sections are added
+            taken = [l["label"] for l in prev]
             labs = [label_for(n, et, []) for _, n in hits[:MAX_LINKS]]
-            alike = len(hits[:MAX_LINKS]) > 1 and len(set(labs)) == 1   # sections chess-results cut to one name: number them
-            for k, (tnr, name) in enumerate(hits[:MAX_LINKS]):
+            alike = not prev and len(hits[:MAX_LINKS]) > 1 and len(set(labs)) == 1   # sections chess-results cut to one name: number them
+            for k, (tnr, name) in enumerate(hits[:MAX_LINKS - len(prev)]):
                 lab = f"Results (section {k + 1})" if alike else label_for(name, et, taken)
                 taken.append(lab)
                 out.append({"label": lab, "url": RESULT_URL.format(t=tnr)})
