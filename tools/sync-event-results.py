@@ -154,8 +154,13 @@ def write(links):
         f"export const RESULTS_LINKS = {body};\n")
 
 
+KEEP_CAPS = {"FIDE", "PWD", "KCB"}
+
+
 def label_for(cand_name, event_tokens, taken):
     extra = [w for w in re.findall(r"[A-Za-z0-9&]+", cand_name) if not tokens(w) & event_tokens and w.lower() not in STOP]
+    if cand_name.isupper():  # ALL CAPS section names get house case; codes (U12, FIDE, U&I) stay
+        extra = [w if w in KEEP_CAPS or "&" in w or any(c.isdigit() for c in w) else w.title() for w in extra]
     label = f"Results ({' '.join(extra[:3])})" if extra else "Results"
     if label in taken:
         label += f" {len(taken) + 1}"
