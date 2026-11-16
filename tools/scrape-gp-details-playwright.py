@@ -20,12 +20,14 @@ FIELDS = {"federation": "federation", "tournament director": "director", "chief 
 def clean_people(value):
     value = re.sub(r"\.\.\..*?All arbiters", "", value, flags=re.I).strip(" ;")
     out = []
-    for part in value.split(";"):
-        part = re.sub(r"\s+", " ", part).strip()
-        if not part:
-            continue
-        m = re.search(r"\b(\d{7,9})\s*$", part)
-        out.append({"name": part[:m.start()].strip() if m else part, "fideId": m.group(1) if m else None})
+    # split only on commas after ")": names themselves may be "Surname, Given"
+    for part in re.split(r"(?<=\))\s*,\s*", value):
+        m = re.search(r"\((\d{7,9})\)", part)
+        name = re.sub(r"\s*\(\d+\)", "", part)
+        name = re.sub(r"\s*\(\d*\)?\s*$", "", name)  # a truncated "(55"
+        name = re.sub(r"\s+", " ", name).strip(" ;,")
+        if name:
+            out.append({"fideId": m.group(1) if m else None, "name": name})
     return out
 
 
@@ -69,7 +71,12 @@ def parse_text(txt):
 def scrape(page, tnr):
     page.goto(BASE.format(id=tnr), wait_until="domcontentloaded", timeout=60000)
     page.wait_for_timeout(3000)
-    text = lambda: page.inner_text("body")
+    # Cells truncate long text (~50 chars) on the page; the full text is in a title attribute.
+    JS = """() => [...document.querySelectorAll('tr')].map(tr => {
+        const c = tr.querySelectorAll(':scope > td, :scope > th'); if (c.length != 2) return '';
+        const v = c[1], t = [v, ...v.querySelectorAll('[title]')].map(e => e.title || '').sort((a, b) => b.length - a.length)[0];
+        return c[0].innerText + '\\t' + (t && t.length > v.innerText.length ? t : v.innerText); }).join('\\n')"""
+    text = lambda: page.evaluate(JS) if "Chief Arbiter" in page.inner_text("body") else page.inner_text("body")
     if "Chief Arbiter" not in text():
         link = page.locator("a", has_text=re.compile("tournament details", re.I))
         if not link.count():
@@ -89,7 +96,22 @@ def scrape(page, tnr):
     return detail
 
 
+def selftest():
+    n = lambda v: [(x["fideId"], x["name"]) for x in clean_people(v)]
+    assert n("NA Nayaka Brian (554004586) ,NA Kimani Stephen (55") == [("554004586", "NA Nayaka Brian"), (None, "NA Kimani Stephen")]
+    assert n("NA Nayaka Brian (554004586), NA Kimani Stephen (554005418)") == [
+        ("554004586", "NA Nayaka Brian"), ("554005418", "NA Kimani Stephen")]
+    assert n("FA Cynthia, Jemurgor (10891234), Awuor, Christine (10830812)") == [
+        ("10891234", "FA Cynthia, Jemurgor"), ("10830812", "Awuor, Christine")]
+    for v in ("FA Onyango Jeff (10810900)", "FA Onyango Jeff(10810900)"):
+        assert parse_text("Chief Arbiter\t" + v)["chiefArbiter"] == {"fideId": "10810900", "name": "FA Onyango Jeff"}
+    assert parse_text("Tournament director\tLeting J Faith")["director"] == {"fideId": None, "name": "Leting J Faith"}
+    print("selftest ok")
+
+
 def main():
+    if sys.argv[1:] == ["--selftest"]:
+        return selftest()
     from playwright.sync_api import sync_playwright
     items = []
     for s in sys.argv[1].split(","):
