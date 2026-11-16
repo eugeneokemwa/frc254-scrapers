@@ -35,7 +35,8 @@ OUT = ROOT / "assets" / "podiums.js"
 
 DUMP = r"""
 const d = await import(process.argv[1]);
-const ev = d.prepare(d.EVENTS);
+const n = new Date(Date.now() + 3 * 36e5);  // Nairobi's day (UTC+3): the runner's UTC clock still showed an event's last day for its first 3 hours after midnight
+const ev = d.prepare(d.EVENTS, new Date(n.getUTCFullYear(), n.getUTCMonth(), n.getUTCDate()));
 console.log(JSON.stringify(ev.filter((e) => e.status === "past").map((e) => ({
   poster: e.poster, title: e.title, links: (e.links || []).filter((l) => /chess-results\.com\/tnr\d+/.test(l.url || ""))
   , lichess: (e.links || []).map((l) => l.url || "").filter((u) => /lichess\.org\/(tournament|swiss)\/\w+/.test(u))
@@ -227,10 +228,11 @@ def build(ev):
             m = re.search(r"<h2[^>]*>(.*?)</h2>", pages[l["url"]], re.S)
             if m and text(m.group(1)) and not re.match(r"(final ranking|rank after|ranking|starting rank)", text(m.group(1)), re.I):
                 names[l["url"]] = text(m.group(1)).split()  # a ranking caption first means the page has no title: unnamed
-        if len(names) < len(links) or len({tuple(w) for w in names.values()}) < len(names):
+        folded = [[w.casefold() for w in ws] for ws in names.values()]  # case doesn't tell sections apart (82: "QUO VADIS" and "Quo Vadis")
+        if len(names) < len(links) or len({tuple(w) for w in folded}) < len(names):
             names = {}  # a section unnamed, or two titles alike: rank them all by label, as before, never titles against labels
         # Drop the words every title shares ("U18 Open", not the event name), but the shortest keeps its last word ("U12" vs "U12 Girls").
-        common = min(len(os.path.commonprefix(list(names.values()))), min(map(len, names.values())) - 1) if names else 0
+        common = min(len(os.path.commonprefix(folded)), min(map(len, names.values())) - 1) if names else 0
         while common and any(w[common].isdigit() for w in names.values()):
             common -= 1  # a bare number keeps the word before it: "Under 16", not "16"
         names = {u: " ".join(w[common:]).strip(" -–—:,·") or " ".join(w) for u, w in names.items()}
