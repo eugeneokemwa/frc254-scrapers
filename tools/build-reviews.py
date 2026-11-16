@@ -52,4 +52,4 @@ for i in todo:
         os.replace(path + ".tmp", path)
         print(i, names["White"], "-", names["Black"], f"{time.time() - t0:.0f}s", flush=True)
     except Exception as e:  # noqa: BLE001 - one bad game must not stop the shard
-        print(i, "FAILED", e, flush=True)
+        import traceback; print(i, "FAILED", e, flush=True); traceback.print_exc(file=sys.stdout)

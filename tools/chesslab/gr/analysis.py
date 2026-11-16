@@ -279,7 +279,8 @@ def analyze(game, level="standard", progress=None, cancelled=None):
                 raise RuntimeError("cancelled")
             san = board.san(mv)
             board.push(mv)
-            infos = [] if board.is_game_over() else eng.analyse(board, limit, multipv=2)
+            # only mate/stalemate has no lines: PGNs play on past fivefold/75-move, those plies still get reviewed
+            infos = [] if not any(board.legal_moves) else eng.analyse(board, limit, multipv=2)
             plies.append({"san": san, "uci": mv.uci(), "fen": board.fen(), "lines": pack_lines(board, infos)})
             if progress:
                 progress(idx / max(total, 1) * 0.85, f"Analysing move {(idx + 1) // 2} of {(total + 1) // 2}")
