@@ -8,8 +8,8 @@ result and the game id of every board, and each game page gives the moves. Write
 tournament with per-game links only fetches the boards of our players. Writes tools/cache/cr-tnr/abroad/<id>.pgn (and its none.txt).
 Usage: scrape-cr-tournaments.py [--abroad] [--threads 4] [--min-players 3] [--share 0.25] [--all] [--only id,id] [--list FILE...] [--extra id,id] [--shard K/N] [--max-requests N]
   (--all drops the Kenyan filter; --list: player-tournament files, default assets/gp-player-tournaments.js; --extra: tournaments to check
-   besides, such as links in the WhatsApp chats; --shard K/N: every N-th tournament, so N Actions runners, each its own IP, share the work; --max-requests N: after N requests touch cache/cr-tnr/.budget-used and exit 4)"""
-import argparse, html, json, os, re, sys, threading, urllib.parse
+   besides, such as links in the WhatsApp chats; --shard K/N: every N-th tournament, so N Actions runners, each its own IP, share the work; --max-requests N: every request incl. retries and the PGN POST counts; past N touch cache/cr-tnr/.budget-used and exit 4; a clean exit writes the count to cache/cr-tnr/.requests-used)"""
+import argparse, atexit, html, json, os, re, sys, threading, urllib.parse
 from concurrent.futures import ThreadPoolExecutor
 import requests
 
@@ -73,17 +73,21 @@ def limited(r):
     return r
 
 NREQ = 0; NLOCK = threading.Lock()
-def get(sess, url, **kw):
+def spend():
+    """Count one real request (retries and POSTs too); over the budget: leave a marker (the workflow reads it) and stop."""
     global NREQ
-    if a.max_requests:   # budget spent: leave a marker (the workflow reads it) and stop before the next request
-        with NLOCK:
-            NREQ += 1
-            over = NREQ > a.max_requests
-        if over:
-            open(os.path.join(HERE, "cache", "cr-tnr", ".budget-used"), "w").close()
-            print(f"request budget of {a.max_requests} used; stopping", file=sys.stderr, flush=True)
-            os._exit(4)
+    with NLOCK:
+        NREQ += 1; over = a.max_requests and NREQ > a.max_requests
+    if over:
+        open(os.path.join(HERE, "cache", "cr-tnr", ".budget-used"), "w").close()
+        print(f"request budget of {a.max_requests} used; stopping", file=sys.stderr, flush=True)
+        os._exit(4)
+# clean exits record the count, so a second stage on the same runner/IP gets only what is left
+atexit.register(lambda: open(os.path.join(HERE, "cache", "cr-tnr", ".requests-used"), "w").write(str(NREQ)))
+
+def get(sess, url, **kw):
     for k in range(3):
+        spend()
         try: return limited(sess.get(url, timeout=60, **kw))
         except requests.RequestException: pass
     return None
@@ -168,6 +172,7 @@ def one(t):
     if not act: return t, "error"
     f.update({"ctl00$P1$cb_DownLoadPGN": "Download as PGN-File", "ctl00$P1$txt_dbkey": t})
     for n in ("txt_von_tag", "txt_bis_tag", "txt_rdvon", "txt_rdbis"): f["ctl00$P1$" + n] = ""
+    spend()
     try: p = limited(sess.post(urllib.parse.urljoin(r.url, act.group(1).replace("&amp;", "&")), data=f, timeout=180))
     except requests.RequestException: return t, "error"
     if p.status_code != 200 or "[Event " not in p.text: return t, "none"

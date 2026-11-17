@@ -89,14 +89,17 @@ jobs:
           mkdir -p out/abroad
           # (a) Olympiads: --only skips the Kenyan filter; none.txt/cache keep reruns from repeating tournaments. At most 1,500 requests, then stop.
           rc=0
-          python3 tools/scrape-cr-tournaments.py --threads 2 --max-requests 1500 --only "$(cat olympiads.txt)" --shard ${{ matrix.shard }}/${{ inputs.shards }} \
-            --list assets/gp-player-tournaments-collected.js || rc=$?
+          if grep -q . olympiads.txt; then   # an empty list must not fall back to the Kenyan list
+            python3 tools/scrape-cr-tournaments.py --threads 2 --max-requests 1500 --only "$(cat olympiads.txt)" --shard ${{ matrix.shard }}/${{ inputs.shards }} \
+              --list assets/gp-player-tournaments-collected.js || rc=$?
+          fi
+          used=$(cat tools/cache/cr-tnr/.requests-used 2>/dev/null || echo 0)   # the budget is per runner (one IP): (b) gets what (a) left
           case $rc in 0|3|4) echo "olympiads exit $rc";; *) echo "olympiads FAILED (exit $rc)"; fail=1;; esac
           cp -n tools/cache/cr-tnr/*.pgn out/ 2>/dev/null || true; cp tools/cache/cr-tnr/none.txt out/none-${{ matrix.shard }}.txt 2>/dev/null || true
           # (b) our players abroad: only if (a) left budget (exit 4 = budget used, 3 = limit page): clean stops, never retry after either
-          if [ "${{ inputs.olympiad_only }}" != "true" ] && [ "$rc" = 0 ]; then
+          if [ "${{ inputs.olympiad_only }}" != "true" ] && [ "$rc" = 0 ] && [ $((1500 - used)) -gt 0 ]; then
             rc=0
-            python3 tools/scrape-cr-tournaments.py --abroad --threads 2 --max-requests 1500 --extra "$(cat olympiads.txt)" --list assets/gp-player-tournaments-collected.js \
+            python3 tools/scrape-cr-tournaments.py --abroad --threads 2 --max-requests $((1500 - used)) --extra "$(cat olympiads.txt)" --list assets/gp-player-tournaments-collected.js \
               --shard ${{ matrix.shard }}/${{ inputs.shards }} || rc=$?
             case $rc in 0|3|4) echo "abroad exit $rc";; *) echo "abroad FAILED (exit $rc)"; fail=1;; esac
             cp tools/cache/cr-tnr/abroad/*.pgn out/abroad/ 2>/dev/null || true
