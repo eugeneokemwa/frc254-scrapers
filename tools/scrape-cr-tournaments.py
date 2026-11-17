@@ -148,7 +148,7 @@ def by_game(sess, t, rounds):
             mv = [re.sub(r"^\d+\.\s*", "", html.unescape(x).strip()) for x in re.findall(r'<a class="game0"[^>]*>([^<]+)</a>', g.text)]
             h = re.search(r"<br>(?:(.*?), )?(\d\d)\.(\d\d)\.(\d{4})</p>", g.text, re.S)
             if not mv or not h: continue
-            ev, d, mo, y = h.groups(); ev = ev or D["tournaments"][t]["n"]
+            ev, d, mo, y = h.groups(); ev = ev or D["tournaments"].get(t, {}).get("n", t)
             text = " ".join((f"{k // 2 + 1}. " if k % 2 == 0 else "") + m for k, m in enumerate(mv))
             out.append(f'[Event "{ev.strip()}"]\n[Date "{y}.{mo}.{d}"]\n[Round "{brd}"]\n[White "{white}"]\n[Black "{black}"]\n[Result "{RES[res]}"]\n\n{text} {RES[res]}\n')
     return "\n".join(out)
@@ -160,7 +160,7 @@ def one(t):
     m = re.search(r"PartieSuche\.aspx\?lan=1&amp;id=(\d+)&amp;tnr=%s&amp;art=3" % t, r.text)
     if not m:
         if not re.search(r"PartieSuche\.aspx\?art=36&amp;id=\d+", r.text): return t, "none"
-        text = by_game(sess, t, D["tournaments"][t]["rd"] or 0)
+        text = by_game(sess, t, D["tournaments"].get(t, {}).get("rd") or 0)
         if a.abroad: text = keep_ours(t, text)
         if "[Event " not in text: return t, "none"
         open(os.path.join(OUT, t + ".pgn"), "w", encoding="utf-8").write(text)
@@ -187,5 +187,5 @@ with ThreadPoolExecutor(a.threads) as ex:
         if what == "none":
             open(NONE, "a").write(t + "\n"); res["none"] += 1
         elif what == "error": res["error"] += 1
-        else: res["ok"] += 1; print(t, D["tournaments"][t]["n"][:50], what, flush=True)
+        else: res["ok"] += 1; print(t, D["tournaments"].get(t, {}).get("n", t)[:50], what, flush=True)
 print(res)

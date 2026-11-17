@@ -4,7 +4,7 @@ the tournament ids already known (the "Olympiad" entries of the player-tournamen
 Usage: discover-olympiads.py --from 2020-01-01 --to 2026-12-31 [--known FILE...] [--extra id,id] [--out olympiads.txt] [--page FILE]
   --known: files with {"tournaments": {id: {"n": name}}} (default assets/gp-player-tournaments*.js) or {id: name} (gp-tournament-names.js);
            only ids whose name has "Olympiad" or "Olimpiad" count. --page FILE: read the result page from FILE instead of the site (tests).
-Exit 3 when chess-results answers with its "daily limit exceeded" page (nothing is written). Search field names are unverified: check on Actions."""
+Exit 2 when over 300 ids (broken search). Exit 3 when chess-results answers with its "daily limit exceeded" page (nothing is written). Search field names are unverified: check on Actions."""
 import argparse, json, os, re, sys
 from bs4 import BeautifulSoup
 
@@ -36,10 +36,10 @@ def search():
     return limited(r.text)
 
 def found(html):   # same table the player search reads: table.CRs2, rows CRg1/CRg2, the tournament link tnr<id>
-    ids = set()
+    ids = set()   # only rows whose tournament name (the link text) has "olymp": the search may ignore our name filter (run 44035532421: 2,000 rows)
     for tr in BeautifulSoup(html, "html.parser").select("table.CRs2 tr.CRg1, table.CRs2 tr.CRg2"):
         for l in tr.find_all("a", href=re.compile(r"tnr\d+")):
-            if "art=9" not in l["href"]: ids.add(re.search(r"tnr(\d+)", l["href"]).group(1))
+            if "art=9" not in l["href"] and re.search(r"olymp", l.get_text(), re.I): ids.add(re.search(r"tnr(\d+)", l["href"]).group(1))
     return ids
 
 def known(path):
@@ -52,6 +52,7 @@ ids = found(search())
 print(len(ids), "from the search", file=sys.stderr)
 for p in a.known: ids |= known(p)
 ids |= {i.strip() for i in a.extra.split(",") if i.strip()}
+if len(ids) > 300: print(f"{len(ids)} ids is far too many for Olympiads: the search is broken, writing nothing", file=sys.stderr); sys.exit(2)
 out = "\n".join(sorted(ids, key=int)) + "\n"
 if a.out: open(a.out, "w").write(out)
 else: sys.stdout.write(out)
