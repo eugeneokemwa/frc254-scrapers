@@ -1,4 +1,4 @@
-All games: every Olympiad on chess-results (2020 to today, any country) plus our players' games elsewhere.
+# All games: every Olympiad on chess-results (2020 to today, any country) plus our players' games elsewhere.
 # chess-results allows 2,000 requests/day/IP: each shard is its own runner and stops at --max-requests 1500 or on a limit page (exit 3).
 # Results are artifacts; nothing is committed. Needs two small tool changes first (see dispatch plan): --max-requests and discover-olympiads.py.
 name: Collect all games
