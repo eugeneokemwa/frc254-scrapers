@@ -1,0 +1,51 @@
+# Probe: what link patterns a team Olympiad's art=2 and art=25 round-1 pages hold. At most 3 requests, no game scraping, nothing saved.
+name: probe-team
+on:
+  workflow_dispatch:
+    inputs:
+      tnr: { description: "chess-results tournament id (digits only)", required: true }
+permissions:
+  contents: read
+jobs:
+  probe:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/setup-python@v5
+        with: { python-version: "3.12" }
+      - run: pip install requests
+      - env:
+          TNR: ${{ inputs.tnr }}
+        run: |
+          python3 - <<'PY'
+          import os, re, sys, time, html, requests
+          t = os.environ["TNR"]
+          if not re.fullmatch(r"\d{1,9}", t): print("tnr must be digits"); sys.exit(1)
+          s = requests.Session(); s.headers["User-Agent"] = "Mozilla/5.0"
+          n = 0
+          def get(url):
+              global n
+              if n: time.sleep(3)
+              n += 1; r = s.get(url, timeout=60)
+              if "exceeded! Your daily limit" in r.text[:2000]: print("rate-limited"); sys.exit(3)
+              return r
+          def show(label, r):
+              p = r.text
+              print(f"== {label}: HTTP {r.status_code}, {len(p)} bytes")
+              print("rows CRg1/CRg2:", len(re.findall(r'<tr class="CRg[12]\b', p)), " CRg1b header rows:", len(re.findall(r'<tr class="CRg1b', p)))
+              for row in re.findall(r'<tr class="CRg1b[^"]*">(.*?)</tr>', p, re.S)[:3]:
+                  print("header:", [html.unescape(re.sub(r"<[^>]*>", "", c)).strip() for c in re.findall(r"<t[hd][^>]*>(.*?)</t[hd]>", row, re.S)])
+              hrefs = re.findall(r'href="([^"]*(?:PartieSuche|art=)[^"]*)"', p)
+              for name, pat in (("PartieSuche art=36", "art=36"), ("PartieSuche art=3", "art=3&"), ("art=25", "art=25"), ("art=2", "art=2&")):
+                  print(f"links {name}:", sum(pat in h for h in hrefs))
+              seen = []
+              for h in hrefs:
+                  if h not in seen: seen.append(h)
+              for h in seen[:5]: print("href:", html.unescape(h)[:160])
+          base = f"https://chess-results.com/tnr{t}.aspx?lan=1&rd=1&turdet=NO"
+          show("art=2", get(base + "&art=2"))
+          r = get(base + "&art=25"); show("art=25 page 1", r)
+          m = re.search(r'href="([^"]*[?&;]page=2[^"]*)"', r.text) or re.search(r'href="([^"]+)"[^>]*>\s*(?:next|&gt;|>)', r.text, re.I)
+          if m: show("art=25 page 2", get(requests.compat.urljoin(r.url, html.unescape(m.group(1)))))
+          else: print("no next-page link on art=25")
+          print("requests made:", n)
+          PY
