@@ -6,10 +6,10 @@ Tournaments with only a PGN link per game (no download-all link) are read round 
 result and the game id of every board, and each game page gives the moves. Writes tools/cache/cr-tnr/<tournament id>.pgn, and lists tournaments with no games in tools/cache/cr-tnr/none.txt (skipped next time).
 --abroad: the other tournaments our players played (abroad, or a big open where they were few): only their own games are kept, and a
 tournament with per-game links only fetches the boards of our players. Writes tools/cache/cr-tnr/abroad/<id>.pgn (and its none.txt).
-Usage: scrape-cr-tournaments.py [--abroad] [--threads 4] [--min-players 3] [--share 0.25] [--all] [--only id,id] [--list FILE...] [--extra id,id] [--shard K/N]
+Usage: scrape-cr-tournaments.py [--abroad] [--threads 4] [--min-players 3] [--share 0.25] [--all] [--only id,id] [--list FILE...] [--extra id,id] [--shard K/N] [--max-requests N]
   (--all drops the Kenyan filter; --list: player-tournament files, default assets/gp-player-tournaments.js; --extra: tournaments to check
-   besides, such as links in the WhatsApp chats; --shard K/N: every N-th tournament, so N Actions runners, each its own IP, share the work)"""
-import argparse, html, json, os, re, sys, urllib.parse
+   besides, such as links in the WhatsApp chats; --shard K/N: every N-th tournament, so N Actions runners, each its own IP, share the work; --max-requests N: after N requests touch cache/cr-tnr/.budget-used and exit 4)"""
+import argparse, html, json, os, re, sys, threading, urllib.parse
 from concurrent.futures import ThreadPoolExecutor
 import requests
 
@@ -18,7 +18,7 @@ OUT = os.path.join(HERE, "cache", "cr-tnr"); NONE = os.path.join(OUT, "none.txt"
 ap = argparse.ArgumentParser(); ap.add_argument("--threads", type=int, default=4); ap.add_argument("--min-players", type=int, default=3)
 ap.add_argument("--share", type=float, default=0.25); ap.add_argument("--all", action="store_true"); ap.add_argument("--only", default="")
 ap.add_argument("--list", nargs="+", default=[os.path.join(ROOT, "assets", "gp-player-tournaments.js")]); ap.add_argument("--extra", default=""); ap.add_argument("--shard", default="")
-ap.add_argument("--abroad", action="store_true")
+ap.add_argument("--abroad", action="store_true"); ap.add_argument("--max-requests", type=int, default=0)   # 0 = no cap
 a = ap.parse_args()
 if a.abroad: OUT = os.path.join(OUT, "abroad"); NONE = os.path.join(OUT, "none.txt")
 os.makedirs(OUT, exist_ok=True)
@@ -72,7 +72,17 @@ def limited(r):
         os._exit(3)
     return r
 
+NREQ = 0; NLOCK = threading.Lock()
 def get(sess, url, **kw):
+    global NREQ
+    if a.max_requests:   # budget spent: leave a marker (the workflow reads it) and stop before the next request
+        with NLOCK:
+            NREQ += 1
+            over = NREQ > a.max_requests
+        if over:
+            open(os.path.join(HERE, "cache", "cr-tnr", ".budget-used"), "w").close()
+            print(f"request budget of {a.max_requests} used; stopping", file=sys.stderr, flush=True)
+            os._exit(4)
     for k in range(3):
         try: return limited(sess.get(url, timeout=60, **kw))
         except requests.RequestException: pass

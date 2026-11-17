@@ -1,0 +1,119 @@
+All games: every Olympiad on chess-results (2020 to today, any country) plus our players' games elsewhere.
+# chess-results allows 2,000 requests/day/IP: each shard is its own runner and stops at --max-requests 1500 or on a limit page (exit 3).
+# Results are artifacts; nothing is committed. Needs two small tool changes first (see dispatch plan): --max-requests and discover-olympiads.py.
+name: Collect all games
+on:
+  workflow_dispatch:
+    inputs:
+      from: { description: First tournament end date, default: "2020-01-01" }
+      to: { description: Last tournament end date (empty = today), default: "" }
+      olympiad_only: { description: Only Olympiads (skip the player stage), type: boolean, default: false }
+      extra_ids: { description: "Extra tournament ids, comma-separated", default: "" }
+      shards: { description: "Runners per stage (max 20; each at most 1,500 requests)", default: "8" }
+permissions: { contents: read }
+
+jobs:
+  plan:   # matrix from the shards input + the Olympiad tournament list (a handful of search requests, one IP)
+    runs-on: ubuntu-latest
+    outputs: { matrix: "${{ steps.m.outputs.matrix }}", to: "${{ steps.m.outputs.to }}" }
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with: { python-version: "3.12" }
+      - run: pip install requests beautifulsoup4
+      - id: m
+        run: |
+          n=${{ inputs.shards }}; [ "$n" -ge 1 ] && [ "$n" -le 20 ] || { echo "shards must be 1-20"; exit 1; }
+          echo "matrix=$(python3 -c "print({'shard':list(range(1,$n+1))})" | tr \' \")" >> "$GITHUB_OUTPUT"
+          echo "to=${{ inputs.to }}" | sed 's/=$/='"$(date +%F)"'/' >> "$GITHUB_OUTPUT"
+      # every Olympiad (Chess, Online, Youth, Disabilities, qualifiers) in the window -> olympiads.txt (tnr ids); exit 3 on a limit page
+      - run: |
+          rc=0; python3 tools/discover-olympiads.py --from ${{ inputs.from }} --to "${{ steps.m.outputs.to }}" --out olympiads.txt || rc=$?
+          touch olympiads.txt   # exit 3 (limit page) is a clean stop: keep what was found
+          case $rc in 0|3) ;; *) exit $rc;; esac
+      - run: python3 -c "ids=set(open('olympiads.txt').read().split())|set('${{ inputs.extra_ids }}'.replace(' ','').split(',')); ids.discard(''); open('olympiads.txt','w').write(','.join(sorted(ids,key=int)))"
+      - uses: actions/upload-artifact@v4
+        with: { name: olympiad-ids, path: olympiads.txt }
+
+  players:   # stage 1: each roster FIDE id's tournaments in the window (about 2 requests a player, ~3,500 over the shards)
+    if: ${{ !inputs.olympiad_only }}
+    needs: plan
+    runs-on: ubuntu-latest
+    timeout-minutes: 300
+    strategy: { fail-fast: false, matrix: "${{ fromJSON(needs.plan.outputs.matrix) }}" }
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with: { python-version: "3.12" }
+      - uses: actions/setup-node@v4
+        with: { node-version: "22" }
+      - run: pip install requests beautifulsoup4
+      - run: python3 tools/scrape-player-tournaments.py --from ${{ inputs.from }} --to ${{ needs.plan.outputs.to }} --shard ${{ matrix.shard }}/${{ inputs.shards }} --out shard-${{ matrix.shard }}.jsonl
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with: { name: "cp-players-${{ matrix.shard }}", path: "shard-${{ matrix.shard }}.jsonl", if-no-files-found: ignore }
+
+  history:
+    if: ${{ always() && needs.plan.result == 'success' }}
+    needs: [plan, players]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        continue-on-error: true
+        with: { pattern: "cp-players-*", path: shards, merge-multiple: true }
+      - run: pip install requests beautifulsoup4
+      - run: |
+          if ls shards/shard-*.jsonl >/dev/null 2>&1; then
+            python3 tools/scrape-player-tournaments.py --merge shards/shard-*.jsonl --from ${{ inputs.from }} --to ${{ needs.plan.outputs.to }} --final assets/gp-player-tournaments-collected.js
+          else cp assets/gp-player-tournaments-history.js assets/gp-player-tournaments-collected.js; fi
+      - uses: actions/upload-artifact@v4
+        with: { name: cp-history, path: assets/gp-player-tournaments-collected.js }
+
+  tournaments:   # stage 2: (a) Olympiads, whole PGNs, all players; (b) our players' games in other tournaments (--abroad)
+    needs: [plan, history]
+    if: ${{ always() && needs.history.result == 'success' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 300
+    strategy: { fail-fast: false, matrix: "${{ fromJSON(needs.plan.outputs.matrix) }}" }
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with: { python-version: "3.12" }
+      - uses: actions/download-artifact@v4
+        with: { name: olympiad-ids, path: . }
+      - uses: actions/download-artifact@v4
+        with: { name: cp-history, path: assets }
+      - run: pip install requests
+      - run: |
+          mkdir -p out/abroad
+          # (a) Olympiads: --only skips the Kenyan filter; none.txt/cache keep reruns from repeating tournaments. At most 1,500 requests, then stop.
+          rc=0
+          python3 tools/scrape-cr-tournaments.py --threads 2 --max-requests 1500 --only "$(cat olympiads.txt)" --shard ${{ matrix.shard }}/${{ inputs.shards }} \
+            --list assets/gp-player-tournaments-collected.js || rc=$?
+          case $rc in 0|3|4) echo "olympiads exit $rc";; *) echo "olympiads FAILED (exit $rc)"; fail=1;; esac
+          cp -n tools/cache/cr-tnr/*.pgn out/ 2>/dev/null || true; cp tools/cache/cr-tnr/none.txt out/none-${{ matrix.shard }}.txt 2>/dev/null || true
+          # (b) our players abroad: only if (a) left budget (exit 4 = budget used, 3 = limit page): clean stops, never retry after either
+          if [ "${{ inputs.olympiad_only }}" != "true" ] && [ "$rc" = 0 ]; then
+            rc=0
+            python3 tools/scrape-cr-tournaments.py --abroad --threads 2 --max-requests 1500 --extra "$(cat olympiads.txt)" --list assets/gp-player-tournaments-collected.js \
+              --shard ${{ matrix.shard }}/${{ inputs.shards }} || rc=$?
+            case $rc in 0|3|4) echo "abroad exit $rc";; *) echo "abroad FAILED (exit $rc)"; fail=1;; esac
+            cp tools/cache/cr-tnr/abroad/*.pgn out/abroad/ 2>/dev/null || true
+          fi
+          exit ${fail:-0}   # real errors fail the shard (artifact still uploads, if: always())
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with: { name: "cp-tnr-${{ matrix.shard }}", path: out, if-no-files-found: ignore }
+
+  merge:   # stage 3: dedupe by game id, one artifact
+    needs: tournaments
+    if: always()
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with: { pattern: "cp-tnr-*", path: parts }
+      - run: python3 tools/collect-merge.py parts games-collected   # PGNs + cr-games.jsonl, sha1(w|b|date|movetext[:80])[:8] dedupe
+      - uses: actions/upload-artifact@v4
+        with: { name: games-collected, path: games-collected }

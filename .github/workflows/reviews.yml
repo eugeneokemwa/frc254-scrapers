@@ -6,6 +6,7 @@ on:
   workflow_dispatch:
     inputs:
       level: { description: "Engine depth (quick 14, standard 18, deep 22)", default: quick }
+      ids: { description: "Only these game ids (comma-separated; empty = every unreviewed game, sharded)", default: "" }
 permissions: { contents: read }
 jobs:
   analyse:
@@ -19,7 +20,8 @@ jobs:
       - uses: actions/setup-python@v5
         with: { python-version: "3.12" }
       - run: sudo apt-get install -y stockfish && pip install chess
-      - run: PATH="/usr/games:$PATH" python3 tools/build-reviews.py --shard ${{ matrix.shard }}/120 --level "${{ inputs.level }}" --skip reviewed.txt --minutes 320 --out out
+      - if: ${{ inputs.ids == '' || matrix.shard == 1 }}   # --only ignores sharding: one shard takes the whole list
+        run: PATH="/usr/games:$PATH" python3 tools/build-reviews.py --only "${{ inputs.ids }}" --shard ${{ matrix.shard }}/120 --level "${{ inputs.level }}" --skip reviewed.txt --minutes 320 --out out
       - uses: actions/upload-artifact@v4
         if: always()
         with: { name: "reviews-${{ matrix.shard }}", path: out, if-no-files-found: ignore }
